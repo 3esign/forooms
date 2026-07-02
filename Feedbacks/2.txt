@@ -1,0 +1,220 @@
+# Foroom Visual Design & Rendering Bible
+
+A single reference for making Foroom look and feel like a premium, intentional piece of design —
+not a generic Three.js demo bolted onto a SaaS dashboard. Covers art direction, the 2D map, the 3D
+voxel renderer, UI/UX, and the specific technical patterns that let you get "stunning" without
+destroying performance. Hand relevant sections to your AI coding tool as you build each piece.
+
+---
+
+## Part 0 — Design philosophy first
+
+Before any visual decision: **the aesthetic has to come from the subject**, not from "what looks
+cool in a Three.js demo." Foroom's subject is civic infrastructure rendered as something playful and
+legible — a serious tool wearing a friendly face. That tension (serious/institutional vs.
+playful/voxel) is your actual design material. Don't default to either "generic gov-tech dashboard"
+(navy blue, Inter font, cards with shadows) or "generic gamer UI" (neon, dark mode, beveled panels).
+Both are the templated answer. The distinctive answer sits between them.
+
+**A concrete design plan before you build anything** (fill this in for real, don't skip it):
+- **Palette (4–6 named hex values):** something that reads as "civic + material" rather than
+  "sci-fi." Consider drawing from real urban materials — concrete, brick, signage yellow, blueprint
+  blue, park green — rather than generic UI blue/purple gradients. Name each color's job (e.g.
+  "Blueprint" for primary actions, "Signal" for live/active states, "Concrete" for neutral surfaces).
+- **Type:** a characterful display face for headings that nods to either civic signage/wayfinding
+  typefaces or architectural drafting lettering, paired with a clean, restrained body face for
+  density (chat, forms, data). A monospace/utility face for coordinates, timestamps, and data —
+  this is a genuinely good fit here since you have real geographic/technical data to display and it
+  reinforces the "digital twin" precision feeling.
+- **Layout concept:** the map-on-left, panel-on-right split you already have is a good bone
+  structure — treat it like a blueprint/plan-view convention (plans are read as "left = context,
+  right = detail/action") rather than an arbitrary dashboard split.
+- **Signature element:** pick ONE thing Foroom is remembered for visually. Strong candidate: the
+  **glow-heatmap-on-2D-map** effect showing activity density — it's unique to your product, ties 2D
+  and 3D together conceptually, and no other tool has it. Spend your visual "budget" making that
+  one thing gorgeous (see Part 3) rather than spreading effort evenly across everything.
+
+Everything below should serve that plan, not replace it.
+
+---
+
+## Part 1 — The 2D map experience
+
+This is the front door, so it carries a lot of weight.
+
+- **Base map style:** don't use a default Mapbox/Google satellite look untouched — apply a custom
+  style layer (Mapbox Studio, MapLibre + custom style JSON) that desaturates the satellite imagery
+  slightly and pushes a subtle color grade matching your palette, so the map feels like *your*
+  product's map, not a generic embed. This is a high-leverage, relatively cheap move.
+- **Forum boundaries:** render as a soft glowing outline rather than a flat solid polygon — a
+  1–2px core line with a soft outer glow (CSS `filter: drop-shadow` or an SVG blur filter for
+  vector overlays) reads as "alive/digital" without being gaudy. Vary the glow intensity by
+  activity level — this is your signature element, built directly into the base map interaction.
+- **Hover cards:** keep them small, fast, and information-dense rather than decorative — a thumbnail
+  (top-down render of the voxel world, cached), name, live player count, activity level. Use a
+  spring-based scale/fade-in (Framer Motion `type: "spring"`, short duration ~150–200ms) rather than
+  a linear fade — spring easing reads as more "physical/tangible," which suits a spatial product.
+- **Zoom-dependent detail:** at city-wide zoom, show only glow intensity/boundaries; only render
+  hover cards and finer boundary detail once zoomed past a threshold. This is both a performance
+  necessity (don't render hundreds of DOM hover targets at once) and a good UX progressive-disclosure
+  pattern.
+- **The 2D→3D transition when a user joins a Foroom** is worth real craft — this is the single
+  moment most likely to make someone say "whoa." Consider a camera move that appears to "dive into"
+  the map at the clicked location, cross-fading from the flat satellite tile into the voxel world
+  loading underneath (even a simple radial wipe or zoom-blur transition sells this well). Avoid a
+  hard cut or a generic spinner — the transition is doing narrative work ("you are entering the
+  digital twin"), not just loading-state work.
+
+## Part 2 — 3D voxel world: performance-first rendering (read this before the pretty stuff)
+
+Stunning visuals in a voxel world are 90% a performance problem first. If it doesn't run at 60fps
+on mid-range hardware, no amount of shader work will read as "stunning" — it'll read as "laggy demo."
+Get this right before touching lighting/materials.
+
+- **Instanced rendering is non-negotiable.** Never create one mesh per voxel. Use
+  `THREE.InstancedMesh` (or a custom instanced-attribute approach) grouped by material/texture, so
+  thousands of blocks of the same type render as a single draw call. This is the single most
+  important technical decision in the whole 3D layer.
+- **Greedy meshing / face culling.** Don't render the faces of voxels that are touching another
+  voxel (hidden internal faces cost nothing visually but cost real GPU time). Implement basic
+  face-culling (only render faces adjacent to empty space) at minimum; greedy meshing (merging
+  adjacent same-texture faces into larger polygons) is the next step up if you need more headroom —
+  worth deferring to post-MVP unless performance testing says otherwise.
+- **Chunking.** Divide each Foroom's bounding box into fixed-size chunks (e.g. 16×16×16 voxels,
+  the Minecraft-standard size for good reason — it balances draw-call count against
+  rebuild-on-edit cost). Only rebuild the mesh of the chunk that changed when a block is placed/
+  removed, not the whole world. This is what makes live multiplayer editing performant.
+- **Frustum culling + distance-based chunk loading.** Don't load/render chunks outside the camera's
+  view frustum or beyond a render-distance radius — exactly like Minecraft's chunk-loading model.
+  Given your bounding-box size caps, this may be less critical than in an infinite world, but still
+  worth building in from the start since it's cheap to add early and expensive to retrofit.
+  Three.js's `Frustum` + `Box3` utilities handle the culling math for you.
+- **LOD (Level of Detail) for distant chunks.** Optionally render far chunks as simplified/lower-
+  resolution blocks (2×2 or 4×4 merged voxels) — visually near-identical at distance, much cheaper.
+  Nice-to-have, not MVP-critical.
+- **Texture atlasing.** Combine all your block textures into a single texture atlas (one image, UV-
+  mapped per face) rather than separate textures per block type — this lets you keep the
+  instanced-mesh draw-call count low even with visual variety. Standard Minecraft-clone technique,
+  well documented.
+- **Fog is your friend, not just atmosphere.** Distance fog (`THREE.Fog` or `FogExp2`) lets you cap
+  render distance without a hard visible pop-in edge — genuinely useful for both performance and
+  mood (and pairs nicely with a day/night cycle, see below).
+
+## Part 3 — 3D voxel world: making it actually gorgeous
+
+Once the performance foundation is solid, this is where "stunning" comes from — and it comes from a
+small number of well-executed effects, not many mediocre ones.
+
+- **Lighting is 80% of the "gorgeous" perception.** For a stylized voxel world, skip physically-
+  based realism (too expensive, and often looks worse for this aesthetic) and instead:
+  - Use a single directional "sun" light + ambient/hemisphere light for a simple, stylized day
+    lighting setup — cheap and reads well against flat voxel colors.
+  - **Baked/vertex ambient occlusion** on voxel corners (the technique that makes Minecraft-style
+    worlds feel tactile rather than flat — darkening vertices where blocks meet). This is a
+    well-documented, cheap technique (compute AO per-vertex at mesh-build time based on neighboring
+    block occupancy, no runtime cost) and is probably your single highest-value lighting investment.
+  - **Day/night cycle** tied to real time or a manual admin slider — sells the "living digital twin"
+    concept on its own, and gives you a natural excuse to show off lighting changes without extra
+    geometry work. Cheap to implement (rotate/tint the directional light, swap skybox gradient,
+    adjust fog color) and disproportionately impressive to look at.
+- **Skybox / sky gradient.** A simple procedural gradient sky (shader-based, sunrise/day/dusk/night
+  presets or continuous interpolation) beats a static cubemap texture for both file size and how well
+  it matches your admin-adjustable parameters. This is a good fit for your "admin sliders for
+  skybox/appearance" feature — expose gradient stops, sun angle, and fog density as the sliders.
+- **Water shader.** A simple animated shader (scrolling normal-map or a cheap sine-wave vertex
+  displacement + a translucent blue with slight fresnel/reflectivity) reads as "alive" for very
+  little GPU cost and is a classic voxel-world showpiece moment (waterways from OSM data).
+- **The glow-heatmap signature element (from Part 0):** implement as an emissive material property
+  on voxels with notes/activity, intensity driven by content volume, with a genuine bloom
+  post-processing pass (`UnrealBloomPass` in Three.js's `EffectComposer`) so it actually glows
+  rather than just being a bright-colored block. This is worth the one non-negotiable post-
+  processing pass in your budget — it's your signature, spend the GPU budget here.
+- **Toon/cel-inspired shading (optional, high-impact if chosen deliberately):** a simple
+  custom shader with 2–3 discrete light bands (rather than smooth PBR falloff) suits blocky voxel
+  geometry very well and is cheaper than PBR. Consider this specifically as a way to make the
+  world feel intentional rather than "unfinished PBR." This is the "one real aesthetic risk" —
+  decide deliberately, don't default into it OR away from it without considering it.
+- **Avatar shape language:** you already have a strong, specific concept (sphere head + tapered
+  polygon body, unique per user). Push the "unique" part with a **procedural palette + pattern
+  generator** rather than fully random RGB values — random hex colors read as noisy/ugly in a
+  crowd; a curated palette with controlled hue/saturation ranges (e.g. always mid-high saturation,
+  varied hue, consistent value) means every possible avatar still looks intentional and belongs to
+  the same visual family. Same principle for the unique Playground block textures.
+- **Post-processing budget: pick 2–3 passes max, not everything available.** Recommended set for
+  this project specifically: **bloom** (for glow blocks — your signature), **subtle vignette**
+  (cheap, adds focus/depth for free), and **ambient occlusion is baked, not a runtime SSAO pass**
+  (cheaper and sufficient for blocky geometry — real SSAO is overkill here and costs real frame
+  time). Skip motion blur, chromatic aberration, film grain, and lens flares — these read as
+  "generic game demo" rather than "civic digital twin" and don't serve the subject.
+
+## Part 4 — UI overlay / HUD (while inside a Foroom)
+
+- **Minimal HUD, maximal legibility.** Minecraft's own HUD restraint is a good model — don't cover
+  the 3D view with panels. A slim top bar (Foroom name, layer switcher, player count) and a
+  bottom-corner minimap (2D top-down view, reusing your map-rendering code) is likely sufficient.
+- **Layer switcher (Council/Playground/Simulation) deserves real visual weight** since it's a core
+  differentiator — not a plain dropdown. Consider a distinct icon/color per layer (consistent
+  through both 2D map glow colors and 3D HUD) so users build a mental model of "which world am I in"
+  at a glance, reinforced across every screen.
+- **Chat as a slide-out panel, not an overlay blocking the world** — multiplayer spatial games
+  (Minecraft included) consistently do this right: chat collapses to a minimal recent-messages
+  strip and expands on demand, never permanently obscuring the thing people are actually looking at.
+- **Block/note interaction (click a block → read/write content):** a modal or side panel that
+  visually "connects" to the clicked block (a subtle line or glow trace from block to panel) rather
+  than a generic centered modal — small detail, reinforces spatial connection between the 3D world
+  and the 2D content layer.
+- **First/third person toggle:** keep the control discoverable (a small persistent icon, not buried
+  in a menu) since it's core to your stated UX, matching the "like original Minecraft" framing.
+
+## Part 5 — Motion and interaction principles (apply everywhere, 2D and 3D)
+
+- **One orchestrated moment beats many scattered animations.** You get exactly one "wow" transition
+  budget per major flow — spend it on 2D→3D entry (Part 1) and on the glow-heatmap (Part 3). Resist
+  animating everything else; hover states, panel opens, and button clicks should be quick (100–200ms)
+  and understated. Over-animation is the fastest way to make a product feel AI-generated/templated.
+- **Respect reduced-motion preferences** (`prefers-reduced-motion` media query) — swap the dive
+  transition for a simple cross-fade, disable ambient camera drift, etc. Genuinely important for a
+  civic accessibility tool, not optional polish.
+- **Loading states should be spatial, not generic spinners**, given the subject — a wireframe/
+  low-poly outline of the bounding box "filling in" with voxels as chunks load communicates real
+  progress and reinforces the digital-twin-being-constructed feeling, rather than an abstract spinner.
+
+## Part 6 — Recommended libraries/tools (for an AI-assisted build specifically)
+
+Chosen for a good power-to-complexity ratio when an AI is doing most of the implementation —
+favor libraries with strong docs/large training-data presence so your AI tool is less likely to
+hallucinate APIs.
+
+- **Three.js** (not a heavier engine like Babylon or a full game engine) — most widely documented,
+  most AI-training-data coverage, integrates cleanly with React via **React Three Fiber** if your
+  frontend is React/Next.js. R3F specifically makes it much easier for an AI tool to reason about
+  your 3D scene as a component tree rather than imperative Three.js code — worth the small extra
+  abstraction layer for a vibe-coded project.
+- **@react-three/drei** — a companion library with pre-built helpers (camera controls, instancing
+  helpers, environment/sky components) that will save your AI tool from reimplementing common
+  patterns from scratch.
+- **@react-three/postprocessing** — wraps Three.js's `EffectComposer` with a much simpler
+  component API for bloom/vignette — easier for an AI to get right than raw `EffectComposer` setup.
+- **MapLibre GL JS** (not Google Maps JS SDK) for the 2D satellite map — open-source, matches your
+  "open source" goal, has good custom-styling support, and free of Google's usage-based billing
+  complexity for an MVP.
+- **Framer Motion** for 2D UI animation (hover cards, panel transitions, layout animation) — very
+  well documented, good AI-training coverage, handles the spring-easing recommendation in Part 1
+  with minimal code.
+- **Zustand** (not Redux) for 3D scene / multiplayer client state — much less boilerplate, and
+  pairs well with R3F; simpler for an AI tool to wire up correctly.
+
+## Part 7 — What to explicitly avoid
+
+- Default Three.js demo look: harsh PBR metal materials, a generic `OrbitControls` free camera with
+  no purpose, a starry-void background. None of this serves a civic digital-twin subject.
+- Generic "gov-tech" dashboard look: navy/white, Inter everywhere, drop-shadow cards, a stock-photo
+  hero. Actively work against this — it undercuts the "empowering, alive" framing you're going for.
+- Over-saturated "gamer" neon-on-black UI — clashes with the civic seriousness of Council mode
+  specifically; reserve high-saturation/glow treatment for the parts of the product that are
+  genuinely about activity/liveliness (heatmap, Playground), not the whole UI uniformly.
+- Random per-user RGB avatar colors with no curation (reads as visually chaotic in a crowded scene —
+  see Part 3 palette-generator note).
+- Stacking every available post-processing effect "because it's available" — pick your 2–3 (Part 3)
+  and execute them well rather than adding bloom + SSAO + motion blur + chromatic aberration +
+  vignette all at once, which reads as unintentional rather than premium.

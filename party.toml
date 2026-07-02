@@ -1,0 +1,10 @@
+name = "forooms-party"
+main = "party/server.ts"
+compatibility_date = "2024-04-05"
+
+[vars]
+# NEXT_PUBLIC_SUPABASE_URL = "https://your-project.supabase.co"
+# SUPABASE_SERVICE_ROLE_KEY = "your-service-role-key"
+
+[parties]
+auth = "party/auth.ts"

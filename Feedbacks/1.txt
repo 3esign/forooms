@@ -1,0 +1,221 @@
+Where I'd push back or flag risk
+1. Vercel is the wrong home for the multiplayer core.
+Vercel is great for the frontend, the landing/map page, and stateless API routes — but it can't host a persistent authoritative game server. Serverless functions are short-lived and don't hold open WebSocket connections or in-memory voxel/player state well. You'll want something like Colyseus, PartyKit, or a small Fly.io/Railway-hosted Node service for the actual real-time multiplayer layer, with Vercel just serving the app shell and talking to that backend. This isn't a small detail — it changes your whole hosting story, so worth deciding early rather than discovering it mid-build.
+2. "Least data stored" is achievable, but only if you commit to it architecturally.
+The right pattern here: never store the voxel grid itself. Store only (a) the Foroom's bounding box, (b) a diff log of user edits (block placed/removed/texture changed, with timestamp + user), and (c) notes/polls/chat as normal rows. On load, regenerate the base world procedurally from OSM every time, then replay the diff log on top. That gives you tiny per-Foroom storage, free versioning/undo, and a natural audit trail of who changed what — which civic tools genuinely need for legitimacy. This is the single most important architectural decision in the whole project, so I'd nail it down before writing any other code.
+3. OSM data quality is wildly inconsistent.
+Building heights, floor counts, and even footprints vary a lot by region — some cities have rich 3D building data in OSM, most don't. Your voxelization will look great in Amsterdam and mediocre in a random suburb. Worth deciding upfront whether missing-data buildings get a default height, get flagged as "low confidence," or get procedurally guessed — because this affects trust in the "digital twin" framing.
+
+1. Why Vercel can't host the multiplayer core (and what should)
+The fundamental issue is architectural, not a Vercel weakness per se. Vercel's compute model is serverless functions that spin up on request and die shortly after (typically 10s–60s execution windows depending on plan, up to 300s on Pro for specific configs). Real-time multiplayer needs the opposite: a process that stays alive, holds player positions and world-diff state in memory for fast access, and pushes updates to many connected clients continuously via WebSockets. A serverless function can't hold a WebSocket open indefinitely, and it can't be the single source of truth for "who else is in this Foroom right now" because a new invocation has no memory of the last one.
+So the real architecture is a split backend:
+
+Vercel — hosts the Next.js (or similar) frontend: the landing page, the 2D satellite map, auth flows, the dashboard, and stateless REST/API routes (fetch OSM data, create a Foroom record, fetch chat history, fetch notes). All fine as serverless functions since these are short request/response cycles.
+A persistent game server — a long-running Node process (not serverless) that owns each Foroom's live session: player positions, current block-diff state in memory, chat relay, and physics/collision if you need it. This is where you'd use something like:
+
+Colyseus — purpose-built for exactly this (authoritative room-based multiplayer state sync, built-in client prediction/interpolation helpers, works well with voxel-style worlds). Probably your best fit given the "rooms" concept maps almost 1:1 onto Foorooms.
+PartyKit — lighter-weight, Cloudflare-Durable-Objects-based, good if you want each Foroom to be a cheap, independently-scaled "party." Appealing because it scales per-room naturally, which matches your "many small worlds" model better than a monolithic game server would.
+Plain Socket.io/ws on a Node server hosted on Fly.io, Railway, or Render — more manual work but full control, and Fly.io in particular is nice because you can run one lightweight machine per active Foroom and let idle ones sleep, which keeps cost proportional to actual usage.
+
+
+
+The pattern that fits your "many small worlds, most idle most of the time" scenario best is one lightweight process/room per active Foroom, spun down when nobody's in it, rather than one giant server holding all Foorooms at once. Fly.io machines or Cloudflare Durable Objects (via PartyKit) both support this pattern naturally — Colyseus can too but you'd manage the room lifecycle yourself.
+One more piece: your database (Postgres via Supabase/Neon, or similar) stays separate from both — it's the durable store for Foroom metadata, diff logs, notes, chat history, users, roles. The game server reads/writes to it but isn't itself the database.
+2. The diff-log architecture, in more detail
+The core idea: never persist the voxel grid as a blob. Persist only the recipe to regenerate it plus the history of changes on top of it. This is genuinely the highest-leverage decision in your whole system, so worth designing carefully.
+What you store per Foroom:
+
+foroom.bounding_box — the lat/lng rectangle the creator selected
+foroom.osm_snapshot_id or osm_fetch_timestamp — so regeneration is deterministic even if OSM data changes later (you don't want a Foroom's base world silently shifting under active proposals because someone edited OSM)
+foroom_edits table — one row per change: {foroom_id, layer (council/playground/simulation), user_id, action (place/remove/texture_change), voxel_coord (x,y,z), value, timestamp}
+foroom_notes — {foroom_id, voxel_coord, user_id, content, type (note/poll), timestamp}
+
+On load / when a player joins:
+
+Regenerate the base voxel world procedurally from the stored bounding box + OSM snapshot (this can be cached aggressively — see below).
+Replay the edit log for that layer on top, in order, to get current state.
+Load into the game server's in-memory representation for that active session.
+
+Why this is worth the complexity:
+
+Storage stays tiny. A base world is O(bounding box size), which you're already capping. Edits are small rows — even a very active Foroom with thousands of edits is kilobytes, not the megabytes a raw voxel grid dump would be.
+You get versioning and undo for free. Since the log is append-only, "what did this space look like last Tuesday" or "who placed this block" is just a query, not a separate feature you have to build.
+It matches your Council/Playground split naturally — same base world, different edit logs layered on top, so you're not duplicating the expensive OSM-derived geometry per layer.
+Audit trail is a governance feature, not just an engineering nicety. For a civic tool, "who proposed this and when" is central to legitimacy — this architecture gives you that as a side effect rather than a bolt-on.
+
+The one thing to get right early: regenerating the base world from OSM shouldn't happen on every player join if it's at all expensive — cache the generated base-world geometry (e.g., as a compressed binary blob in object storage, keyed by foroom_id + osm_snapshot_id) and only regenerate when the Foroom is created or an admin explicitly requests a refresh. That gives you the best of both: tiny database rows, but no repeated procedural-generation cost on every load.
+3. OSM data quality and what to do about it
+This is less an architecture problem and more a "decide your defaults now or you'll be firefighting later" problem.
+What you'll actually get from OSM, and how unevenly:
+
+Building footprints (the 2D outline) are reasonably reliable in most urban areas — this is the best-covered OSM data type globally.
+Building height is inconsistent. Some regions have building:levels or height tags populated (parts of Western Europe, especially Germany/Netherlands, are well-tagged); huge swaths of the world have neither, so you're voxelizing a footprint with no idea how tall to make it.
+Roads are well-covered almost everywhere — this is OSM's original strength — but road width and surface type tagging is spottier outside well-mapped cities.
+Trees, waterways, and other "flavor" elements are extremely patchy — great in some hobbyist-mapped neighborhoods, nearly absent elsewhere.
+
+Practical approach:
+
+Define a confidence tier per element when you fetch OSM data: e.g., "explicit height tag" > "levels tag × assumed floor height (~3m)" > "no data, use a default height by building type/footprint area" > "no building type either, use a flat generic default." Then — importantly — make the tier visible in the UI, even subtly (a slightly different texture or a small icon), so users understand which parts of the world are "real digital twin" versus "best guess." This protects the tool's credibility; nothing kills trust in a "digital twin" faster than someone in the actual neighborhood noticing their building is the wrong height with no acknowledgment that it's an estimate.
+For trees/water/greenery, treat sparse OSM coverage as a floor, not a ceiling — you could optionally blend in a secondary open dataset (e.g., Overture Maps, which merges OSM with other sources and has more consistent building height coverage in many regions) as a fallback layer before falling back further to defaults.
+Cap your bounding-box size (which you're already planning to do for performance) partly because of this — smaller areas are easier to sanity-check and less likely to contain huge stretches of unmapped territory that would otherwise silently degrade into a field of default-height gray boxes.
+Build the "regenerate from OSM" step (see diff-log answer above) as an explicit, admin-triggered action rather than fully automatic-forever — that way if OSM coverage for a region improves over time, an admin can deliberately refresh a Foroom's base world without it happening unexpectedly mid-deliberation.
+
+If it's useful, I could sketch the actual foroom_edits table schema and a rough sequence diagram for "player joins → world loads → edit happens → syncs to other players," or map out which specific OSM tags you'd want to query (via Overpass API) for the MVP feature set.
+
+
+For "let AI do everything, minimize my own moving parts," I'd point you at PartyKit. Here's why it beats the alternatives for your specific situation, then exactly what to tell your AI coding tool.
+Why PartyKit specifically
+
+Deployment is one command (npx partykit deploy) — no Dockerfile, no server config, no choosing instance sizes, no scaling settings. This matters enormously for vibe-coding because there's no infra layer for the AI to get subtly wrong.
+It matches your "Foroom" concept almost exactly. PartyKit's core unit is a "room" — a small isolated stateful object that wakes up when someone connects and sleeps when everyone leaves. That's precisely "one live world per Foroom, only running when someone's in it," and you get that behavior for free instead of having to build it.
+It's built on Cloudflare's infrastructure, so scaling, global distribution, and connection handling are handled invisibly — you never touch it.
+It pairs naturally with Vercel. Your Next.js app stays on Vercel exactly as planned; PartyKit is just an additional small project (can even live in the same repo) that your frontend connects to over WebSocket. No architectural conflict.
+Its API surface is small and well-documented, which matters a lot for AI-assisted coding — the less surface area, the less room for the AI to hallucinate config or misuse an API. Colyseus is more powerful but has more concepts (rooms, schemas, state sync patterns) for the AI to potentially get wrong; for a first version, less is more.
+Generous free tier, so your MVP costs nothing to run.
+
+The one thing to be upfront with yourself about: PartyKit gives you the networking and room-lifecycle layer, not the game engine — you (via AI) still write the logic for "here's how player positions and block edits get broadcast." That's true of every option though; nothing gives you that for free.
+What to actually tell your AI coding tool
+Frame the task in this order so it builds the right mental model before writing code:
+
+"Set up a PartyKit project alongside my Next.js app, in the same repo." PartyKit has an official Next.js starter/integration — tell the AI to use that rather than wiring it up from scratch.
+"Each Foroom is one PartyKit room, identified by the Foroom's ID." This is the single most important sentence to give it — it tells the AI to route connections using the Foroom ID as the room name, so PartyKit's built-in room isolation does your multiplayer session separation for you automatically.
+"The room should hold in-memory state for: connected players (id, position, rotation), and the current block-diff state for this session." Be explicit that this is in-memory, ephemeral state — not the source of truth.
+"On room start, fetch the base world + persisted edit log from [your database] and load it into memory. On every block edit, broadcast it to all connected clients AND persist it to the database asynchronously." This tells the AI to implement the diff-log pattern from before, with PartyKit's room as the live/fast layer and your Postgres database as the durable layer.
+"On room disconnect/empty, no special cleanup needed" — worth telling the AI explicitly, since PartyKit already handles hibernation, so it doesn't try to build extra shutdown logic you don't need.
+
+One caution
+Cloudflare Durable Objects (what PartyKit runs on) bill and behave a little differently from a traditional server — mostly fine for you, but if your AI-assisted build ever hits weird connection-limit or pricing questions, that's the thing to search rather than assuming it behaves like a normal Node server.
+If you want, I can draft the actual starter prompt/spec you'd hand to your AI coding tool for this piece specifically — a concrete "build this PartyKit room with this schema" brief rather than just guidance.
+
+# Foroom Multiplayer Room — PartyKit Implementation Spec
+
+This is a brief you can hand directly to an AI coding tool (Claude Code, Cursor, etc.) to build the
+real-time multiplayer layer. It assumes: Next.js app on Vercel, PartyKit for the live room server,
+Postgres (Supabase/Neon) for durable storage.
+
+---
+
+## 1. Room identity and lifecycle
+
+- **One PartyKit room per Foroom, per layer.** Room ID should be `${foroomId}:${layer}` (e.g.
+  `abc123:playground`, `abc123:council`). Do NOT use one room per Foroom covering all layers at once —
+  Council and Playground have independent edit logs and player lists, so they need to be isolated rooms,
+  even though they render "the same physical space."
+- On `onStart` (room boot, first connection): fetch the cached base-world geometry blob + the full edit
+  log for that `foroomId + layer` from Postgres, replay edits onto the base world, hold the resulting
+  voxel diff-state in memory as a `Map<voxelCoordKey, VoxelState>`. Don't hold the full base world in
+  memory if it's large — only the diffs. The base world can stay as a reference the client already has
+  or fetches separately over HTTP.
+- On `onConnect`, send the new player the current in-memory diff state (not the full history — just
+  current resulting state) plus current player roster. Don't replay the whole edit log to the client;
+  that's what the diff *state* (post-replay) is for.
+- On disconnect, remove the player from the in-memory roster and broadcast a `player_left` event.
+  No manual room teardown needed — PartyKit hibernates empty rooms automatically.
+- **Room state is disposable.** If the room process restarts, it must be able to fully reconstruct
+  itself from Postgres. Never treat in-memory room state as the source of truth for anything beyond
+  the current session — Postgres is the source of truth.
+
+## 2. Message schema (client ↔ room)
+
+Keep the message protocol small and typed. Suggested shape (adapt to your stack, e.g. Zod for
+validation):
+
+**Client → Room:**
+- `join { userId, nickname, avatarConfig, role }`
+- `move { position: [x,y,z], rotation: [x,y,z], timestamp }` — high frequency, don't persist these
+- `block_edit { action: 'place'|'remove'|'texture', coord: [x,y,z], value, timestamp }`
+- `note_add { coord: [x,y,z], content, type: 'note'|'poll' }`
+- `chat_message { roomChannelId, content, timestamp }`
+
+**Room → Client(s):**
+- `world_state { diffs: [...], players: [...] }` — sent once on join
+- `player_moved { userId, position, rotation }` — broadcast to others, NOT echoed back to sender
+- `player_joined` / `player_left`
+- `block_updated { coord, newValue, userId }` — broadcast to all including sender (for confirmation)
+- `note_added`
+- `chat_broadcast`
+
+**Important:** validate every incoming message server-side (role permissions, bounding-box limits,
+rate limits) before broadcasting or persisting. Never trust the client's claimed role — look it up
+server-side from the session/auth token attached to the connection.
+
+## 3. Persistence strategy (this is the part most likely to get built wrong)
+
+- **Position/rotation updates are never persisted.** They're the highest-frequency message and are
+  purely ephemeral — broadcast only, don't touch the database.
+- **Block edits and notes ARE persisted**, but asynchronously and without blocking the broadcast:
+  1. Apply the edit to in-memory state.
+  2. Broadcast to all connected clients immediately.
+  3. Fire-and-forget (or queue) a write to the `foroom_edits` Postgres table.
+  - Tell the AI explicitly: broadcast first, persist second, don't make players wait on a DB
+    round-trip to see their own block placed.
+- **Batch DB writes if edit frequency is high.** For an MVP this probably doesn't matter, but tell
+  the AI to structure the persistence call as its own function so it's easy to swap for batching later
+  (e.g. buffer edits for 1–2 seconds and insert in bulk) without touching the game logic.
+- **Idempotency:** include a client-generated UUID on each edit message so retries/reconnects don't
+  double-write the same edit if a persistence call is retried.
+
+## 4. Authority and permission checks (do this server-side, always)
+
+- The room, not the client, decides whether an action is allowed. On `block_edit`, check the sender's
+  role (fetched at connect time from your auth/session, cached on the connection object — don't
+  re-query the DB on every message):
+  - Council layer: only `builder`/`admin` can place/remove blocks; `participant` can only add notes.
+  - Playground layer: `participant` and above can place/remove, subject to their remaining block
+    quota (track quota server-side, not client-side — otherwise it's trivially cheatable).
+- Reject and drop (don't just ignore — send an error event back) any message that fails a permission
+  or rate-limit check, so the client UI can show "not allowed" rather than silently doing nothing.
+
+## 5. Rate limiting and abuse protection
+
+- Cap `move` message frequency per client (e.g. server only processes at most ~15–20/sec per player,
+  drop extras) — clients can send faster than needed and you don't want to broadcast-storm everyone
+  else in the room.
+- Cap `block_edit` frequency per player (e.g. a few per second max) — mainly to stop a buggy or
+  malicious client from writing an unbounded flood into Postgres.
+- Cap the number of concurrent players per room (define this number based on your bounding-box size
+  limits — tell the AI this needs a config value, not a hardcoded guess) and reject new connections
+  over that with a clear "room full" message the client can display.
+
+## 6. What NOT to build (common over-engineering traps for this stack)
+
+- Don't build custom room-cleanup/shutdown logic — PartyKit hibernates idle rooms automatically.
+- Don't build a custom WebSocket reconnection protocol — PartyKit's client library already handles
+  reconnect; just make sure `onConnect` correctly resends full current state so a reconnecting client
+  resyncs cleanly.
+- Don't try to make the room itself horizontally scalable/shared across multiple processes — each
+  room is meant to be single-process by design. If you need more players than one room can handle,
+  that's a signal to revisit the per-Foroom player cap, not to add clustering.
+- Don't persist chat/move/note events into the same table as block edits — keep `foroom_edits` (world
+  state changes) separate from `foroom_chat` and `foroom_notes` since they have different read
+  patterns and retention needs.
+
+## 7. Testing checklist to give the AI
+
+Ask it to verify, before calling this "done":
+- Two browser tabs joining the same Foroom see each other's movement and block edits in real time.
+- Refreshing one tab mid-session correctly resyncs current world state (not just from that point
+  forward).
+- A `participant`-role user attempting a Council block edit is rejected server-side even if the
+  client UI is bypassed (test via direct WebSocket message, not just clicking buttons).
+- Room correctly reconstructs identical state after being forced to restart (simulates PartyKit
+  hibernation/restart) — this is the real test of "Postgres is the source of truth."
+
+Yes, a handful — but they're all quick, free-tier signups, not anything heavy. Here's what you'll need for the stack we've discussed:
+Required to build and deploy:
+
+GitHub — you already want this for open source, so create the repo there. Your AI coding tool will push code to it.
+Vercel — connect it to your GitHub repo for auto-deploy of the frontend. Free tier is plenty for an MVP.
+PartyKit — signs up via GitHub (Cloudflare-backed). Free tier covers early-stage usage.
+Supabase or Neon (pick one, for Postgres) — Supabase is worth considering here specifically because it also bundles auth (email + Google login) out of the box, which you need anyway for your nickname/email/Google login flow. That could save you from standing up a separate auth provider.
+
+Not required, but worth having:
+
+Google Cloud Console — only if you want Google Sign-In as a login option (you do, per your spec). You'll need to register an OAuth client there. If you go with Supabase auth, it walks you through this step.
+OpenRouter (or similar) — only needed later, when you build the AI protector feature. Skip for MVP.
+
+Not required at all:
+
+OpenStreetMap itself needs no account — the Overpass API (which you'll query for building/road/tree data) is free and open, no signup.
+
+One practical note: since you're vibe-coding, I'd create these accounts yourself rather than having the AI tool try to — API keys and OAuth credentials are sensitive and you don't want them auto-generated into a public GitHub repo by accident. Set up the accounts, drop the keys into a .env.local file, and make sure your AI tool adds .env.local to .gitignore before you push anything public.
