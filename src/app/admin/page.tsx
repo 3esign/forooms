@@ -81,7 +81,7 @@ export default function AdminDashboard() {
           <table className="w-full text-left text-sm">
             <thead className="bg-white/5 border-b border-urban-concrete/20">
               <tr>
-                <th className="p-4 font-semibold text-urban-concrete uppercase tracking-wider">User Name</th>
+                <th className="p-4 font-semibold text-urban-concrete uppercase tracking-wider">User</th>
                 <th className="p-4 font-semibold text-urban-concrete uppercase tracking-wider">Status</th>
                 <th className="p-4 font-semibold text-urban-concrete uppercase tracking-wider">Date</th>
                 <th className="p-4 font-semibold text-urban-concrete uppercase tracking-wider text-right">Actions</th>
@@ -90,7 +90,10 @@ export default function AdminDashboard() {
             <tbody>
               {requests.sort((a,b) => b.createdAt - a.createdAt).map(req => (
                 <tr key={req.id} className="border-b border-urban-concrete/10 hover:bg-white/5">
-                  <td className="p-4 font-mono">{req.name}</td>
+                  <td className="p-4">
+                    <div className="font-mono text-white">{req.email}</div>
+                    <div className="text-xs text-urban-concrete mt-1">{req.description}</div>
+                  </td>
                   <td className="p-4">
                     <span className={`px-2 py-1 rounded text-xs uppercase tracking-wider font-bold ${
                       req.status === 'pending' ? 'bg-urban-signal/20 text-urban-signal' :

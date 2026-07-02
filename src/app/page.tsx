@@ -25,7 +25,8 @@ export default function Home() {
 
   // Auth States
   const [authStatus, setAuthStatus] = useState<AccessRequest | null>(null);
-  const [requestName, setRequestName] = useState("");
+  const [requestEmail, setRequestEmail] = useState("");
+  const [requestDescription, setRequestDescription] = useState("");
 
   const socket = usePartySocket({
     room: "admin-auth",
@@ -42,8 +43,11 @@ export default function Home() {
 
   const handleRequestAccess = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!requestName) return;
-    socket.send(JSON.stringify({ type: "request_access", payload: { name: requestName } }));
+    if (!requestEmail || !requestDescription) return;
+    socket.send(JSON.stringify({ 
+      type: "request_access", 
+      payload: { email: requestEmail, description: requestDescription } 
+    }));
   };
 
   const handleBboxSelect = (bbox: [number, number, number, number] | null) => {
@@ -243,15 +247,21 @@ export default function Home() {
               <Lock className="w-4 h-4" /> Request Access
             </div>
             <input 
-              type="text" 
-              placeholder="Your Name / Organization"
-              value={requestName}
-              onChange={(e) => setRequestName(e.target.value)}
+              type="email" 
+              placeholder="Your Email"
+              value={requestEmail}
+              onChange={(e) => setRequestEmail(e.target.value)}
               className="w-full bg-white/5 border border-urban-concrete/20 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-urban-blueprint transition-all"
+            />
+            <textarea 
+              placeholder="Why do you want to create a Foroom?"
+              value={requestDescription}
+              onChange={(e) => setRequestDescription(e.target.value)}
+              className="w-full bg-white/5 border border-urban-concrete/20 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-urban-blueprint transition-all resize-none h-24"
             />
             <button 
               type="submit"
-              disabled={!requestName}
+              disabled={!requestEmail || !requestDescription}
               className="w-full py-3 bg-urban-concrete/20 hover:bg-urban-concrete/30 text-white rounded-xl text-sm font-bold tracking-wide transition-all disabled:opacity-50"
             >
               Submit Request

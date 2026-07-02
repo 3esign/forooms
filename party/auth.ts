@@ -2,13 +2,14 @@ import type * as Party from "partykit/server";
 
 export interface AccessRequest {
   id: string;
-  name: string;
+  email: string;
+  description: string;
   status: "pending" | "approved" | "rejected";
   createdAt: number;
 }
 
 export type AuthMessage = 
-  | { type: "request_access", payload: { name: string } }
+  | { type: "request_access", payload: { email: string; description: string } }
   | { type: "approve_access", payload: { id: string, adminPin: string } }
   | { type: "reject_access", payload: { id: string, adminPin: string } }
   | { type: "check_status", payload: { id: string } };
@@ -41,7 +42,8 @@ export default class AuthServer implements Party.Server {
 
   onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
     const url = new URL(ctx.request.url);
-    if (url.searchParams.get("adminPin") === process.env.ADMIN_PIN) {
+    const pin = process.env.ADMIN_PIN || "160189";
+    if (url.searchParams.get("adminPin") === pin) {
       this.adminConnections.add(conn);
       conn.send(JSON.stringify({
         type: "all_requests",
@@ -61,7 +63,8 @@ export default class AuthServer implements Party.Server {
       const id = crypto.randomUUID();
       const req: AccessRequest = {
         id,
-        name: msg.payload.name,
+        email: msg.payload.email,
+        description: msg.payload.description,
         status: "pending",
         createdAt: Date.now()
       };
@@ -73,6 +76,27 @@ export default class AuthServer implements Party.Server {
 
       // Notify admins
       this.broadcastAdmins();
+
+      // Send email notification to admin via Resend (Requires RESEND_API_KEY)
+      if (process.env.RESEND_API_KEY) {
+        try {
+          await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              from: "FOROOMS Access <onboarding@resend.dev>",
+              to: "poturaksemir@gmail.com",
+              subject: `New FOROOMS Access Request from ${req.email}`,
+              html: `<p><strong>Email:</strong> ${req.email}</p><p><strong>Description:</strong> ${req.description}</p><p><a href="https://forooms.vercel.app/admin">Click here to approve or reject</a></p>`
+            })
+          });
+        } catch (e) {
+          console.error("Failed to send email notification", e);
+        }
+      }
     } 
     else if (msg.type === "check_status") {
       const req = this.requests.get(msg.payload.id);
@@ -83,7 +107,8 @@ export default class AuthServer implements Party.Server {
       }
     }
     else if (msg.type === "approve_access" || msg.type === "reject_access") {
-      if (msg.payload.adminPin !== process.env.ADMIN_PIN) {
+      const pin = process.env.ADMIN_PIN || "160189";
+      if (msg.payload.adminPin !== pin) {
         sender.send(JSON.stringify({ type: "error", payload: "Unauthorized" }));
         return;
       }
