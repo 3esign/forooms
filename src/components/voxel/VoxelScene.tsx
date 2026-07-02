@@ -69,16 +69,20 @@ export function VoxelScene({ bbox, onExit, token }: VoxelSceneProps) {
       try {
         const msg = JSON.parse(e.data);
         if (msg.type === "init") {
-          const loadedEdits: Record<string, number> = {};
+          const loadedEdits: VoxelBlock[] = [];
           msg.edits.forEach((edit: any) => {
-            loadedEdits[`${edit.x},${edit.y},${edit.z}`] = edit.blockId;
+            loadedEdits.push({ x: edit.x, y: edit.y, z: edit.z, blockId: edit.blockId });
           });
           setExternalEdits(loadedEdits);
         } else if (msg.type === "edit") {
-          setExternalEdits(prev => ({
-            ...prev,
-            [`${msg.x},${msg.y},${msg.z}`]: msg.blockId
-          }));
+          setExternalEdits(prev => {
+            // Remove existing block at coordinate if replacing/deleting
+            const filtered = prev.filter(b => b.x !== msg.x || b.y !== msg.y || b.z !== msg.z);
+            if (msg.blockId !== 0) { // Assuming 0 is Air/Delete
+              filtered.push({ x: msg.x, y: msg.y, z: msg.z, blockId: msg.blockId });
+            }
+            return filtered;
+          });
         }
       } catch (err) {
         console.error("PartyKit message error:", err);
