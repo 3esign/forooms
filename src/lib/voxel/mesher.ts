@@ -26,31 +26,21 @@ export function greedyMeshGrid(grid: CityGrid): Record<number, Cuboid[]> {
   const minZ = grid.minZ;
   const maxZ = grid.maxZ;
   
-  // Find max Y in the grid
+  // Find max Y in the grid and all unique materials
   let maxY = 0;
-  for (const [, yMap] of grid.data.entries()) {
-    for (const yStr of yMap.keys()) {
-      const y = parseInt(yStr, 10);
-      if (y > maxY) maxY = y;
+  const materials = new Set<number>();
+  
+  for (const [key, blockId] of grid.getEntries()) {
+    const y = parseInt(key.split(",")[1], 10);
+    if (y > maxY) maxY = y;
+    if (blockId !== BlockId.Air) {
+      materials.add(blockId);
     }
   }
 
   const width = maxX - minX + 1;
   const depth = maxZ - minZ + 1;
   const height = maxY + 1;
-
-  // We process each material type separately to make greedy meshing simple.
-  // First, let's find all unique materials present in the grid.
-  const materials = new Set<number>();
-  for (const [, yMap] of grid.data.entries()) {
-    for (const [, zMap] of yMap.entries()) {
-      for (const blockId of zMap.values()) {
-        if (blockId !== BlockId.Air) {
-          materials.add(blockId);
-        }
-      }
-    }
-  }
 
   // Pre-allocate a mask for greedy sweeping (1D array for the 2D slice)
   const mask = new Int8Array(width * depth);
