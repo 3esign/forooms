@@ -351,7 +351,40 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
           vegetation: totalVegetation,
         });
 
-        if (active) setStatus("completed");
+        if (active) {
+          // Find building-free spawn position near center (0, 0)
+          let spawnX = 0;
+          let spawnZ = 0;
+          let found = false;
+          
+          for (let r = 0; r <= 30 && !found; r++) {
+            for (let dx = -r; dx <= r && !found; dx++) {
+              for (let dz = -r; dz <= r && !found; dz++) {
+                if (r > 0 && Math.abs(dx) !== r && Math.abs(dz) !== r) continue;
+                
+                let isClear = true;
+                for (let y = 1; y <= 3; y++) {
+                  const block = grid.getVoxel(dx, y, dz);
+                  if (block !== 0 && block !== 7) {
+                    isClear = false;
+                    break;
+                  }
+                }
+                if (isClear) {
+                  spawnX = dx;
+                  spawnZ = dz;
+                  found = true;
+                }
+              }
+            }
+          }
+
+          // Teleport player to the safe spot (ground level y=0 => eye height 1.98 automatically set by Player.tsx)
+          setTeleportPos({ x: spawnX, y: 0, z: spawnZ });
+          setTimeout(() => setTeleportPos(null), 100);
+          
+          setStatus("completed");
+        }
       } catch (err: any) {
         if (active) {
           setError(err.message);
@@ -665,7 +698,7 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
           teleportPos={teleportPos}
         />
 
-        <MiniMapTracker bbox={bbox} expanded={isMiniMapExpanded} />
+        <MiniMapTracker bbox={bbox} />
       </Canvas>
 
       {/* Hotbar Overlay */}

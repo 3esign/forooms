@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
@@ -10,11 +12,7 @@ import { Maximize2, Minimize2 } from "lucide-react";
 export function MiniMapUI({ bbox, infoBlocks, expanded, onToggleExpand }: { bbox: Bbox, infoBlocks: Record<string, string>, expanded: boolean, onToggleExpand: () => void }) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<maplibregl.Map | null>(null);
-
-  const { width, depth } = useMemo(() => getGridDimensionsFromBbox(bbox), [bbox]);
-  
-  // World bounds are approximately [-width, width] and [-depth, depth]
-  const mapSize = expanded ? 400 : 200;
+  const [markersList, setMarkersList] = useState<maplibregl.Marker[]>([]);
 
   useEffect(() => {
     if (!mapContainer.current || mapInstance.current) return;
@@ -51,14 +49,17 @@ export function MiniMapUI({ bbox, infoBlocks, expanded, onToggleExpand }: { bbox
       container: mapContainer.current,
       style: satelliteStyle as any,
       center: [centerLng, centerLat],
-      zoom: 17, // Approximating zoom based on typical voxel area, you may need to adjust
+      zoom: 17,
       interactive: false,
       attributionControl: false
     });
     
+    (window as any).foroomsMiniMap = mapInstance.current;
+    
     return () => {
       mapInstance.current?.remove();
       mapInstance.current = null;
+      delete (window as any).foroomsMiniMap;
     };
   }, [bbox]);
 
@@ -68,26 +69,45 @@ export function MiniMapUI({ bbox, infoBlocks, expanded, onToggleExpand }: { bbox
       setTimeout(() => mapInstance.current?.resize(), 100);
     }
   }, [expanded]);
-  
-  
-  const toMapCoords = (worldX: number, worldZ: number) => {
-    // Map world [-width/2, width/2] to [0, mapSize]
-    const x = ((worldX + width / 2) / width) * mapSize;
-    const z = ((worldZ + depth / 2) / depth) * mapSize;
-    return { x, z };
-  };
 
-  const infoMarkers = useMemo(() => {
-    const markers: {x: number, z: number}[] = [];
-    for (const key of Object.keys(infoBlocks)) {
+  // Manage Info Markers geographically via Maplibre
+  useEffect(() => {
+    if (!mapInstance.current) return;
+    
+    // Clear old markers
+    markersList.forEach(m => m.remove());
+    
+    const newMarkers: maplibregl.Marker[] = [];
+    const R = 6371000;
+    const voxelSize = 2;
+    const [w, s, e, n] = bbox;
+    const centerLat = (s + n) / 2;
+    const centerLng = (w + e) / 2;
+
+    Object.keys(infoBlocks).forEach(key => {
       const [vx, vy, vz] = key.split(",").map(Number);
-      // voxel to world is 1:1
-      const worldX = vx;
-      const worldZ = vz;
-      markers.push(toMapCoords(worldX, worldZ));
-    }
-    return markers;
-  }, [infoBlocks, width, depth]);
+      const xMeters = vx * voxelSize;
+      const zMeters = vz * voxelSize;
+
+      const lat = centerLat - (zMeters / (R * (Math.PI / 180)));
+      const lng = centerLng + (xMeters / (R * Math.cos((centerLat * Math.PI) / 180) * (Math.PI / 180)));
+
+      // Create DOM element for marker
+      const el = document.createElement("div");
+      el.className = "w-2.5 h-2.5 bg-yellow-400 rounded-full shadow-[0_0_8px_rgba(250,204,21,1)] pointer-events-none";
+
+      const marker = new maplibregl.Marker({ element: el })
+        .setLngLat([lng, lat])
+        .addTo(mapInstance.current!);
+      newMarkers.push(marker);
+    });
+
+    setMarkersList(newMarkers);
+    
+    return () => {
+      newMarkers.forEach(m => m.remove());
+    };
+  }, [infoBlocks, bbox]);
 
   return (
     <div className={`absolute bottom-6 right-6 transition-all duration-300 ${expanded ? 'w-[400px] h-[400px] rounded-2xl' : 'w-[200px] h-[200px] rounded-full'} bg-urban-void/80 border-2 border-urban-concrete/30 overflow-hidden shadow-2xl z-20 pointer-events-auto`}>
@@ -101,20 +121,11 @@ export function MiniMapUI({ bbox, infoBlocks, expanded, onToggleExpand }: { bbox
         backgroundSize: '20px 20px'
       }} />
 
-      {/* Info Markers */}
-      {infoMarkers.map((m, i) => (
-        <div 
-          key={i} 
-          className="absolute w-2 h-2 bg-yellow-400 rounded-full shadow-[0_0_8px_rgba(250,204,21,1)] transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"
-          style={{ left: m.x, top: m.z }}
-        />
-      ))}
-
-      {/* Local Player Marker */}
+      {/* Local Player Marker (fixed in center, rotates) */}
       <div 
         id="minimap-player"
-        className="absolute w-3 h-3 bg-urban-blueprint rounded-full shadow-[0_0_10px_rgba(47,129,247,1)] transform -translate-x-1/2 -translate-y-1/2 transition-transform duration-75 pointer-events-none"
-        style={{ left: '50%', top: '50%' }} // default center
+        className="absolute w-3 h-3 bg-urban-blueprint rounded-full shadow-[0_0_10px_rgba(47,129,247,1)] transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+        style={{ left: '50%', top: '50%' }}
       >
         <div 
           id="minimap-player-dir"
@@ -134,30 +145,33 @@ export function MiniMapUI({ bbox, infoBlocks, expanded, onToggleExpand }: { bbox
 }
 
 // Put this inside the Canvas. It updates the DOM directly for performance.
-export function MiniMapTracker({ bbox, expanded }: { bbox: Bbox, expanded?: boolean }) {
-  const { width, depth } = useMemo(() => getGridDimensionsFromBbox(bbox), [bbox]);
-  const mapSize = expanded ? 400 : 200;
-
+export function MiniMapTracker({ bbox }: { bbox: Bbox }) {
   useFrame(({ camera }) => {
-    const el = document.getElementById("minimap-player");
     const dirEl = document.getElementById("minimap-player-dir");
-    if (!el || !dirEl) return;
-
-    const x = ((camera.position.x + width / 2) / width) * mapSize;
-    const z = ((camera.position.z + depth / 2) / depth) * mapSize;
-    
-    // Clamp to map bounds
-    const cx = Math.max(0, Math.min(mapSize, x));
-    const cz = Math.max(0, Math.min(mapSize, z));
-
-    el.style.left = `${cx}px`;
-    el.style.top = `${cz}px`;
+    if (!dirEl) return;
 
     // Calculate yaw rotation
     const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, "YXZ");
-    // euler.y is yaw in radians. We want to rotate the arrow. 0 is -Z (North).
     const deg = (euler.y * 180) / Math.PI;
     dirEl.style.transform = `translate(-50%, 0) rotate(${deg}deg)`;
+
+    // Center Map on player
+    const map = (window as any).foroomsMiniMap;
+    if (map) {
+      const R = 6371000;
+      const voxelSize = 2;
+      const xMeters = camera.position.x * voxelSize;
+      const zMeters = camera.position.z * voxelSize;
+
+      const [w, s, e, n] = bbox;
+      const centerLat = (s + n) / 2;
+      const centerLng = (w + e) / 2;
+
+      const lat = centerLat - (zMeters / (R * (Math.PI / 180)));
+      const lng = centerLng + (xMeters / (R * Math.cos((centerLat * Math.PI) / 180) * (Math.PI / 180)));
+
+      map.setCenter([lng, lat]);
+    }
   });
 
   return null;
