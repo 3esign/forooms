@@ -35,8 +35,22 @@ async function initDb() {
     console.log("DATABASE_URL is set. Connecting to PostgreSQL database...");
     dbStatus = "Connecting to PostgreSQL...";
     try {
+      const dbUrlParsed = url.parse(DATABASE_URL);
+      const hostname = dbUrlParsed.hostname;
+      
+      // Force manual DNS lookup to resolve IPv4 address only
+      const ip = await new Promise((resolve, reject) => {
+        dns.lookup(hostname, { family: 4 }, (err, address) => {
+          if (err) reject(err);
+          else resolve(address);
+        });
+      });
+      
+      console.log(`Resolved hostname ${hostname} to IPv4: ${ip}`);
+      const resolvedConnectionStr = DATABASE_URL.replace(hostname, ip);
+
       pgClient = new Client({
-        connectionString: DATABASE_URL,
+        connectionString: resolvedConnectionStr,
         ssl: {
           rejectUnauthorized: false
         }
