@@ -2,6 +2,8 @@ const http = require("http");
 const url = require("url");
 const fs = require("fs");
 const path = require("path");
+const dns = require("dns");
+dns.setDefaultResultOrder("ipv4first");
 const crypto = require("crypto");
 const { WebSocketServer } = require("ws");
 const { Client } = require("pg");
