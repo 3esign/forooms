@@ -49,3 +49,15 @@ export type AuthResponse =
   | { type: "all_requests", payload: AccessRequest[] }
   | { type: "request_submitted", payload: string }
   | { type: "error", payload: string };
+
+export interface PlayerState {
+  id: string;
+  role: string;
+  email: string;
+  nick: string;
+  avatarColor: string;
+  avatarNodes: number;
+  x: number;
+  y: number;
+  z: number;
+}

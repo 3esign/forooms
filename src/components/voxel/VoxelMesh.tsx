@@ -5,6 +5,7 @@ import { getBlockDef } from "../../lib/blocks/BlockRegistry";
 import { Cuboid, buildGeometryFromCuboids } from "../../lib/voxel/mesher";
 import { Html } from "@react-three/drei";
 import { PRNG } from "../../lib/voxel/prng";
+import { PlayerState } from "@/types/auth";
 
 const VOXEL_SIZE = 1;
 
@@ -85,6 +86,13 @@ export function VoxelMesh({ voxelList, blockId, texture }: { voxelList: VoxelBlo
 
 export function MeshedChunk({ cuboids, blockId, texture }: { cuboids: Cuboid[]; blockId: number; texture: THREE.Texture | null }) {
   const geometry = useMemo(() => buildGeometryFromCuboids(cuboids, blockId), [cuboids, blockId]);
+
+  useEffect(() => {
+    return () => {
+      geometry.dispose();
+    };
+  }, [geometry]);
+
   const def = getBlockDef(blockId);
   const castsShadow = def ? def.castsShadow : false;
 
@@ -174,7 +182,7 @@ export function AvatarMesh({ color = "#3b82f6", nodes = 4, size = 1 }) {
   );
 }
 
-export function OtherPlayer({ player, activeChat }: { player: any; activeChat?: { message: string; timestamp: number } }) {
+export function OtherPlayer({ player, activeChat }: { player: PlayerState; activeChat?: { message: string; timestamp: number } }) {
   const showChat = activeChat && (Date.now() - activeChat.timestamp < 5000);
 
   return (

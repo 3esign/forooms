@@ -10,7 +10,8 @@ import { Bbox } from "../../lib/osm/types";
 import { fetchOSMData, projectLatLngToGrid, getGridDimensionsFromBbox } from "../../lib/osm/fetcher";
 import { CityGrid } from "../../lib/voxel/CityGrid";
 import { BlockId } from "../../lib/blocks/BlockRegistry";
-import { createAllTextures } from "./TextureAtlas";
+import { createAllTextures } from "./TextureRegistry";
+import { PlayerState } from "@/types/auth";
 import { VoxelMesh, VoxelBlock, MeshedChunk, InfoBlockHighlights, OtherPlayer, PixelClouds } from "./VoxelMesh";
 import { SimulationAgents } from "./SimulationAgents";
 import { MiniMapUI, MiniMapTracker } from "./MiniMap";
@@ -123,9 +124,7 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const [infoText, setInfoText] = useState("");
   const [isEditingInfo, setIsEditingInfo] = useState(false);
-
-  // Presence and Logs
-  const [players, setPlayers] = useState<any[]>([]);
+  const [players, setPlayers] = useState<PlayerState[]>([]);
   const [logs, setLogs] = useState<{timestamp: number; type: string; message: string}[]>([]);
   const [activeChats, setActiveChats] = useState<Record<string, { message: string; timestamp: number }>>({});
   const [hotbarIndex, setHotbarIndex] = useState(0);
@@ -782,7 +781,7 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
       {controlsEnabled && (
         <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
           <ActivitySidebar 
-            players={Object.values(players)} 
+            players={players.map(p => ({ ...p, isOnline: true }))} 
             logs={logs} 
             onSendChat={handleSendChat}
           />

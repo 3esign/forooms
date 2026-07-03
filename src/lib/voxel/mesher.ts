@@ -9,23 +9,60 @@ export interface Cuboid {
   w: number;
   h: number;
   d: number;
+  facesMask?: number; // Bitmask of visible faces: +Z (1), -Z (2), +Y (4), -Y (8), +X (16), -X (32)
 }
 
-/**
- * A greedy meshing algorithm that takes a CityGrid and merges adjacent 
- * identical voxels into large cuboids.
- * 
- * Returns a map of BlockId -> Array of Cuboids.
- */
 const CHUNK_SIZE = 16;
 
 function toChunk(v: number): number {
   return Math.floor(v / CHUNK_SIZE);
 }
 
+function isFaceOccluded(
+  grid: CityGrid,
+  x: number,
+  y: number,
+  z: number,
+  w: number,
+  h: number,
+  d: number,
+  faceAxis: number,
+  faceDir: number
+): boolean {
+  if (faceAxis === 0) { // X axis face (Left/Right)
+    const nx = faceDir > 0 ? x + w : x - 1;
+    for (let ly = 0; ly < h; ly++) {
+      for (let lz = 0; lz < d; lz++) {
+        if (grid.getVoxel(nx, y + ly, z + lz) === BlockId.Air) {
+          return false;
+        }
+      }
+    }
+  } else if (faceAxis === 1) { // Y axis face (Top/Bottom)
+    const ny = faceDir > 0 ? y + h : y - 1;
+    if (ny < 0) return true; // Ground bottom is always occluded
+    for (let lx = 0; lx < w; lx++) {
+      for (let lz = 0; lz < d; lz++) {
+        if (grid.getVoxel(x + lx, ny, z + lz) === BlockId.Air) {
+          return false;
+        }
+      }
+    }
+  } else { // Z axis face (Front/Back)
+    const nz = faceDir > 0 ? z + d : z - 1;
+    for (let lx = 0; lx < w; lx++) {
+      for (let ly = 0; ly < h; ly++) {
+        if (grid.getVoxel(x + lx, y + ly, nz) === BlockId.Air) {
+          return false;
+        }
+      }
+    }
+  }
+  return true; // Fully occluded by neighboring blocks
+}
+
 /**
  * Remesh only the 16³ chunks touched by a single voxel edit.
- * Falls back to full remesh when chunk state is unavailable.
  */
 export function patchMeshedChunksAfterEdit(
   grid: CityGrid,
@@ -129,13 +166,24 @@ function greedyMeshChunks(
                 d++;
               }
 
+              const cx = startX + lx;
+              const cz = startZ + lz;
+              let facesMask = 0;
+              if (!isFaceOccluded(grid, cx, y, cz, w, 1, d, 2, 1)) facesMask |= 1;  // +Z
+              if (!isFaceOccluded(grid, cx, y, cz, w, 1, d, 2, -1)) facesMask |= 2; // -Z
+              if (!isFaceOccluded(grid, cx, y, cz, w, 1, d, 1, 1)) facesMask |= 4;  // +Y
+              if (!isFaceOccluded(grid, cx, y, cz, w, 1, d, 1, -1)) facesMask |= 8; // -Y
+              if (!isFaceOccluded(grid, cx, y, cz, w, 1, d, 0, 1)) facesMask |= 16; // +X
+              if (!isFaceOccluded(grid, cx, y, cz, w, 1, d, 0, -1)) facesMask |= 32;// -X
+
               cuboids.push({
-                x: startX + lx,
+                x: cx,
                 y,
-                z: startZ + lz,
+                z: cz,
                 w,
                 h: 1,
                 d,
+                facesMask,
               });
 
               for (let i = 0; i < w; i++) {
@@ -162,13 +210,11 @@ function greedyMeshChunks(
 export function greedyMeshGrid(grid: CityGrid): Record<number, Cuboid[]> {
   const result: Record<number, Cuboid[]> = {};
   
-  // We need to know the bounds.
   const minX = grid.minX;
   const maxX = grid.maxX;
   const minZ = grid.minZ;
   const maxZ = grid.maxZ;
   
-  // Find max Y in the grid and all unique materials
   let maxY = 0;
   const materials = new Set<number>();
   
@@ -185,18 +231,14 @@ export function greedyMeshGrid(grid: CityGrid): Record<number, Cuboid[]> {
   const depth = maxZ - minZ + 1;
   const height = maxY + 1;
 
-  // Pre-allocate a mask for greedy sweeping (1D array for the 2D slice)
   const mask = new Int8Array(width * depth);
 
   for (const blockId of materials) {
-
     const cuboids: Cuboid[] = [];
 
-    // Sweep over each Y level (horizontal slices)
+    // Sweep over Y slices
     for (let y = 0; y < height; y++) {
       let maskIdx = 0;
-      
-      // Build the boolean mask for this Y level and material
       for (let x = 0; x < width; x++) {
         for (let z = 0; z < depth; z++) {
           const actualX = minX + x;
@@ -206,18 +248,15 @@ export function greedyMeshGrid(grid: CityGrid): Record<number, Cuboid[]> {
         }
       }
 
-      // Greedy mesh the 2D mask
       maskIdx = 0;
       for (let x = 0; x < width; x++) {
         for (let z = 0; z < depth; z++) {
           if (mask[maskIdx] === 1) {
-            // Compute width
             let w = 1;
             while (x + w < width && mask[maskIdx + w * depth] === 1) {
               w++;
             }
             
-            // Compute depth
             let d = 1;
             let done = false;
             while (z + d < depth) {
@@ -231,7 +270,6 @@ export function greedyMeshGrid(grid: CityGrid): Record<number, Cuboid[]> {
               d++;
             }
 
-            // Create cuboid (h=1 initially, we could 3D sweep but 2D per-level is fast and good enough for our buildings)
             const actualX = minX + x;
             const actualZ = minZ + z;
             
@@ -244,7 +282,6 @@ export function greedyMeshGrid(grid: CityGrid): Record<number, Cuboid[]> {
               d: d
             });
 
-            // Clear the mask
             for (let i = 0; i < w; i++) {
               for (let j = 0; j < d; j++) {
                 mask[maskIdx + i * depth + j] = 0;
@@ -256,8 +293,7 @@ export function greedyMeshGrid(grid: CityGrid): Record<number, Cuboid[]> {
       }
     }
     
-    // Pass 2: Merge vertically across Y slices!
-    // Since buildings are extruded upwards, merging vertically eliminates thousands of interior floor cuboids.
+    // Vertical Merging Pass
     for (let i = 0; i < cuboids.length; i++) {
       const c1 = cuboids[i];
       if (!c1) continue;
@@ -267,25 +303,32 @@ export function greedyMeshGrid(grid: CityGrid): Record<number, Cuboid[]> {
         if (!c2) continue;
 
         if (c1.x === c2.x && c1.z === c2.z && c1.w === c2.w && c1.d === c2.d && c1.y + c1.h === c2.y) {
-          // Merge c2 into c1
           c1.h += c2.h;
-          cuboids[j] = null as any; // Mark for deletion
+          cuboids[j] = null as any;
         }
       }
     }
 
-    result[blockId] = cuboids.filter(c => c !== null);
+    const finalCuboids = cuboids.filter(c => c !== null);
+    // Adjacency-Aware Face Occlusion Pass
+    for (const c of finalCuboids) {
+      let facesMask = 0;
+      if (!isFaceOccluded(grid, c.x, c.y, c.z, c.w, c.h, c.d, 2, 1)) facesMask |= 1;  // +Z
+      if (!isFaceOccluded(grid, c.x, c.y, c.z, c.w, c.h, c.d, 2, -1)) facesMask |= 2; // -Z
+      if (!isFaceOccluded(grid, c.x, c.y, c.z, c.w, c.h, c.d, 1, 1)) facesMask |= 4;  // +Y
+      if (!isFaceOccluded(grid, c.x, c.y, c.z, c.w, c.h, c.d, 1, -1)) facesMask |= 8; // -Y
+      if (!isFaceOccluded(grid, c.x, c.y, c.z, c.w, c.h, c.d, 0, 1)) facesMask |= 16; // +X
+      if (!isFaceOccluded(grid, c.x, c.y, c.z, c.w, c.h, c.d, 0, -1)) facesMask |= 32;// -X
+      c.facesMask = facesMask;
+    }
+
+    result[blockId] = finalCuboids;
   }
 
   return result;
 }
 
-/**
- * Converts a list of Cuboids into a single optimized THREE.BufferGeometry.
- * UVs are mapped such that a 1x1 texture perfectly tiles across W, H, D.
- */
 export function buildGeometryFromCuboids(cuboids: Cuboid[], blockId: number): THREE.BufferGeometry {
-  // PODIUM_Y offset for urban surfaces - set to 0.0 to keep level with base terrain
   const PODIUM_Y = 0.0;
   const isUrban = [
     BlockId.Concrete, BlockId.Wall, BlockId.Asphalt, BlockId.Sidewalk,
@@ -300,13 +343,7 @@ export function buildGeometryFromCuboids(cuboids: Cuboid[], blockId: number): TH
   
   let vertexOffset = 0;
 
-  // For each cuboid, we push 6 faces (each with 4 vertices)
   for (const c of cuboids) {
-    // Our voxels are 2 units wide by default, but let's keep units as grid indices here,
-    // and scale them in the Mesh. Or we output real-world units directly.
-    // Let's output voxel coordinates (where 1 unit = 1 voxel block).
-    // The VoxelMesh component handles the * 2 scale.
-    
     const px = c.x - 0.5;
     const py = c.y - 0.5 + yOffset;
     const pz = c.z - 0.5;
@@ -314,103 +351,115 @@ export function buildGeometryFromCuboids(cuboids: Cuboid[], blockId: number): TH
     const h = c.h;
     const d = c.d;
 
+    const mask = c.facesMask !== undefined ? c.facesMask : 63; // Render all 6 faces if no mask provided
+
     // Front face (+Z)
-    positions.push(
-      px, py, pz + d,       // bottom left
-      px + w, py, pz + d,   // bottom right
-      px + w, py + h, pz + d, // top right
-      px, py + h, pz + d    // top left
-    );
-    normals.push(0,0,1, 0,0,1, 0,0,1, 0,0,1);
-    uvs.push(0, 0, w, 0, w, h, 0, h);
-    indices.push(
-      vertexOffset, vertexOffset + 1, vertexOffset + 2,
-      vertexOffset, vertexOffset + 2, vertexOffset + 3
-    );
-    vertexOffset += 4;
+    if (mask & 1) {
+      positions.push(
+        px, py, pz + d,
+        px + w, py, pz + d,
+        px + w, py + h, pz + d,
+        px, py + h, pz + d
+      );
+      normals.push(0,0,1, 0,0,1, 0,0,1, 0,0,1);
+      uvs.push(0, 0, w, 0, w, h, 0, h);
+      indices.push(
+        vertexOffset, vertexOffset + 1, vertexOffset + 2,
+        vertexOffset, vertexOffset + 2, vertexOffset + 3
+      );
+      vertexOffset += 4;
+    }
 
     // Back face (-Z)
-    positions.push(
-      px + w, py, pz,
-      px, py, pz,
-      px, py + h, pz,
-      px + w, py + h, pz
-    );
-    normals.push(0,0,-1, 0,0,-1, 0,0,-1, 0,0,-1);
-    uvs.push(0, 0, w, 0, w, h, 0, h);
-    indices.push(
-      vertexOffset, vertexOffset + 1, vertexOffset + 2,
-      vertexOffset, vertexOffset + 2, vertexOffset + 3
-    );
-    vertexOffset += 4;
+    if (mask & 2) {
+      positions.push(
+        px + w, py, pz,
+        px, py, pz,
+        px, py + h, pz,
+        px + w, py + h, pz
+      );
+      normals.push(0,0,-1, 0,0,-1, 0,0,-1, 0,0,-1);
+      uvs.push(0, 0, w, 0, w, h, 0, h);
+      indices.push(
+        vertexOffset, vertexOffset + 1, vertexOffset + 2,
+        vertexOffset, vertexOffset + 2, vertexOffset + 3
+      );
+      vertexOffset += 4;
+    }
 
     // Top face (+Y)
-    positions.push(
-      px, py + h, pz + d,
-      px + w, py + h, pz + d,
-      px + w, py + h, pz,
-      px, py + h, pz
-    );
-    normals.push(0,1,0, 0,1,0, 0,1,0, 0,1,0);
-    uvs.push(0, 0, w, 0, w, d, 0, d);
-    indices.push(
-      vertexOffset, vertexOffset + 1, vertexOffset + 2,
-      vertexOffset, vertexOffset + 2, vertexOffset + 3
-    );
-    vertexOffset += 4;
+    if (mask & 4) {
+      positions.push(
+        px, py + h, pz + d,
+        px + w, py + h, pz + d,
+        px + w, py + h, pz,
+        px, py + h, pz
+      );
+      normals.push(0,1,0, 0,1,0, 0,1,0, 0,1,0);
+      uvs.push(0, 0, w, 0, w, d, 0, d);
+      indices.push(
+        vertexOffset, vertexOffset + 1, vertexOffset + 2,
+        vertexOffset, vertexOffset + 2, vertexOffset + 3
+      );
+      vertexOffset += 4;
+    }
 
     // Bottom face (-Y)
-    positions.push(
-      px, py, pz,
-      px + w, py, pz,
-      px + w, py, pz + d,
-      px, py, pz + d
-    );
-    normals.push(0,-1,0, 0,-1,0, 0,-1,0, 0,-1,0);
-    uvs.push(0, 0, w, 0, w, d, 0, d);
-    indices.push(
-      vertexOffset, vertexOffset + 1, vertexOffset + 2,
-      vertexOffset, vertexOffset + 2, vertexOffset + 3
-    );
-    vertexOffset += 4;
+    if (mask & 8) {
+      positions.push(
+        px, py, pz,
+        px + w, py, pz,
+        px + w, py, pz + d,
+        px, py, pz + d
+      );
+      normals.push(0,-1,0, 0,-1,0, 0,-1,0, 0,-1,0);
+      uvs.push(0, 0, w, 0, w, d, 0, d);
+      indices.push(
+        vertexOffset, vertexOffset + 1, vertexOffset + 2,
+        vertexOffset, vertexOffset + 2, vertexOffset + 3
+      );
+      vertexOffset += 4;
+    }
 
     // Right face (+X)
-    positions.push(
-      px + w, py, pz + d,
-      px + w, py, pz,
-      px + w, py + h, pz,
-      px + w, py + h, pz + d
-    );
-    normals.push(1,0,0, 1,0,0, 1,0,0, 1,0,0);
-    uvs.push(0, 0, d, 0, d, h, 0, h);
-    indices.push(
-      vertexOffset, vertexOffset + 1, vertexOffset + 2,
-      vertexOffset, vertexOffset + 2, vertexOffset + 3
-    );
-    vertexOffset += 4;
+    if (mask & 16) {
+      positions.push(
+        px + w, py, pz + d,
+        px + w, py, pz,
+        px + w, py + h, pz,
+        px + w, py + h, pz + d
+      );
+      normals.push(1,0,0, 1,0,0, 1,0,0, 1,0,0);
+      uvs.push(0, 0, d, 0, d, h, 0, h);
+      indices.push(
+        vertexOffset, vertexOffset + 1, vertexOffset + 2,
+        vertexOffset, vertexOffset + 2, vertexOffset + 3
+      );
+      vertexOffset += 4;
+    }
 
     // Left face (-X)
-    positions.push(
-      px, py, pz,
-      px, py, pz + d,
-      px, py + h, pz + d,
-      px, py + h, pz
-    );
-    normals.push(-1,0,0, -1,0,0, -1,0,0, -1,0,0);
-    uvs.push(0, 0, d, 0, d, h, 0, h);
-    indices.push(
-      vertexOffset, vertexOffset + 1, vertexOffset + 2,
-      vertexOffset, vertexOffset + 2, vertexOffset + 3
-    );
-    vertexOffset += 4;
+    if (mask & 32) {
+      positions.push(
+        px, py, pz,
+        px, py, pz + d,
+        px, py + h, pz + d,
+        px, py + h, pz
+      );
+      normals.push(-1,0,0, -1,0,0, -1,0,0, -1,0,0);
+      uvs.push(0, 0, d, 0, d, h, 0, h);
+      indices.push(
+        vertexOffset, vertexOffset + 1, vertexOffset + 2,
+        vertexOffset, vertexOffset + 2, vertexOffset + 3
+      );
+      vertexOffset += 4;
+    }
   }
 
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
-
-  // We no longer need to scale or translate since we use a 1:1 scale.
   return geometry;
 }

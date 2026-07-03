@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { Layers, Box, Cpu, ChevronRight, Lock, Key, ClipboardList, Send, MapPin, Eye } from "lucide-react";
+import { Layers, Box, Cpu, ChevronRight, Lock, Key, ClipboardList, Send, MapPin, Eye, User } from "lucide-react";
 import { normalizeBbox } from "../lib/osm";
 import usePartySocket from "partysocket/react";
 import { AuthResponse, UserAccount, ActiveForoom, AuthMessage } from "@/types/auth";
@@ -543,15 +543,54 @@ export default function Home() {
                 </div>
               </div>
             ) : activeAccount ? (
-              <div className="space-y-4">
-                <div className="p-4 rounded-xl bg-urban-park/10 border border-urban-park/20 flex flex-col">
-                  <span className="text-xs text-urban-park uppercase font-bold tracking-wider">Logged in as Builder</span>
-                  <span className="text-white text-sm mt-1">{activeAccount.email}</span>
+              <div className="space-y-4 font-mono">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-urban-concrete flex items-center gap-1.5 border-b border-white/10 pb-2">
+                  <User className="w-3.5 h-3.5 text-urban-park" />
+                  Builder Profile
+                </h3>
+
+                <div className="p-4 rounded-xl bg-white/5 border border-urban-concrete/20 space-y-4">
+                  <div className="flex gap-4 items-center">
+                    {activeAccount.avatarColor && activeAccount.avatarNodes ? (
+                      <div className="w-16 h-16 bg-black/20 rounded-lg overflow-hidden border border-white/10 shrink-0">
+                        <AvatarPreview color={activeAccount.avatarColor} nodes={activeAccount.avatarNodes} />
+                      </div>
+                    ) : (
+                      <div className="w-16 h-16 bg-black/20 rounded-lg border border-white/10 flex items-center justify-center shrink-0">
+                        <User className="w-8 h-8 text-urban-concrete" />
+                      </div>
+                    )}
+                    <div className="space-y-1">
+                      <div className="text-[10px] uppercase tracking-wider text-urban-concrete font-bold">Nickname</div>
+                      <div className="text-sm font-bold text-white leading-tight break-all">
+                        {activeAccount.nick || activeAccount.email.split("@")[0]}
+                      </div>
+                      <div className="text-[10px] uppercase tracking-wider text-urban-concrete/60 font-bold mt-1">Role</div>
+                      <div className="text-xs text-urban-park font-bold">
+                        Builder
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-white/5 pt-3 space-y-2">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-urban-concrete font-bold">Email Address</div>
+                      <div className="text-xs text-white/80 mt-0.5 break-all">{activeAccount.email}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-urban-concrete font-bold">Member Since</div>
+                      <div className="text-xs text-white/80 mt-0.5">
+                        {new Date(activeAccount.createdAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                
+
                 {!activeAccount.canCreateForoom && (
                   <div className="p-4 rounded-xl bg-urban-signal/10 border border-urban-signal/20 text-center">
-                    <p className="text-xs text-urban-signal">You do not have permission to create new maps, but you can click on active maps above to join and build.</p>
+                    <p className="text-xs text-urban-signal leading-relaxed">
+                      You have permissions to build and annotate existing maps, but you are not authorized to initialize new maps.
+                    </p>
                   </div>
                 )}
 

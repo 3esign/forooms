@@ -22,7 +22,8 @@ let db = {
   forooms: {},
   roomEdits: {},
   roomInfoBlocks: {},
-  roomAppearances: {}
+  roomAppearances: {},
+  failedAttempts: {}
 };
 
 let pgClient = null;
@@ -36,6 +37,11 @@ async function initDb() {
     dbStatus = "Connecting to PostgreSQL...";
     try {
       const dbUrlParsed = url.parse(DATABASE_URL);
+      const auth = dbUrlParsed.auth ? dbUrlParsed.auth.split(":") : [];
+      const user = auth[0];
+      const password = auth[1];
+      const database = dbUrlParsed.pathname ? dbUrlParsed.pathname.substring(1) : "postgres";
+      const port = dbUrlParsed.port ? parseInt(dbUrlParsed.port, 10) : 5432;
       const hostname = dbUrlParsed.hostname;
       
       // Force manual DNS lookup to resolve IPv4 address only
@@ -47,12 +53,16 @@ async function initDb() {
       });
       
       console.log(`Resolved hostname ${hostname} to IPv4: ${ip}`);
-      const resolvedConnectionStr = DATABASE_URL.replace(hostname, ip);
 
       pgClient = new Client({
-        connectionString: resolvedConnectionStr,
+        host: ip,
+        port: port,
+        database: database,
+        user: user,
+        password: password,
         ssl: {
-          rejectUnauthorized: false
+          rejectUnauthorized: true,
+          servername: hostname // Keep original hostname for strict TLS verification
         }
       });
       await pgClient.connect();
@@ -70,6 +80,7 @@ async function initDb() {
       const res = await pgClient.query("SELECT data FROM forooms_store WHERE key = 'current'");
       if (res.rows.length > 0) {
         db = res.rows[0].data;
+        if (!db.failedAttempts) db.failedAttempts = {};
         console.log("Database loaded successfully from PostgreSQL.");
       } else {
         // Initialize row
@@ -79,7 +90,10 @@ async function initDb() {
       dbStatus = "Connected to PostgreSQL";
       dbError = null;
     } catch (err) {
-      console.error("Failed to connect or initialize PostgreSQL database, falling back to local file storage:", err);
+      console.error("Failed to connect or initialize PostgreSQL database:", err);
+      if (process.env.NODE_ENV === "production" || process.env.RENDER) {
+        throw new Error("CRITICAL: Database connection failed in production! Process exiting to prevent data loss.");
+      }
       pgClient = null;
       dbStatus = "PostgreSQL Error (Fallback to local file storage)";
       dbError = err.message || err.toString();
@@ -100,6 +114,7 @@ function loadLocalDb() {
   if (fs.existsSync(DB_PATH)) {
     try {
       db = JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
+      if (!db.failedAttempts) db.failedAttempts = {};
       console.log("Database loaded successfully from local file.");
     } catch (e) {
       console.error("Failed to load db.json, starting fresh", e);
@@ -134,23 +149,39 @@ function saveDb() {
 // Session tokens cache
 const tokens = new Map();
 
-// Helper to hash password
+// Helper to hash password - upgraded to 600,000 PBKDF2 iterations for modern security compliance
 function hashPassword(password, salt) {
   if (!salt) {
     salt = crypto.randomBytes(16).toString("hex");
   }
-  const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
+  const hash = crypto.pbkdf2Sync(password, salt, 600000, 64, "sha512").toString("hex");
   return { hash, salt };
 }
 
 function generateRandomPassword() {
   const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let pass = "";
-  for (let i = 0; i < 8; i++) {
-    const idx = crypto.randomInt(0, chars.length);
-    pass += chars.charAt(idx);
+  for (let i = 0; i < 12; i++) {
+    const idx = crypto.randomBytes(1)[0] % chars.length;
+    pass += chars[idx];
   }
   return pass;
+}
+
+// Timing-safe session lookup
+function getUserByToken(token) {
+  if (!token) return null;
+  for (const [t, user] of tokens.entries()) {
+    if (safeCompare(t, token)) {
+      return user;
+    }
+  }
+  return null;
+}
+
+// timing-safe compare helper
+function timingSafeCompare(a, b) {
+  return safeCompare(a, b);
 }
 
 // Active connections
@@ -166,9 +197,17 @@ if (!ADMIN_PIN) {
     throw new Error("ADMIN_PIN environment variable is REQUIRED in production/Render!");
   }
   ADMIN_PIN = "123456"; // Secure local development default
-} else if (ADMIN_PIN === "1234") {
-  if (process.env.NODE_ENV === "production" || process.env.RENDER) {
-    throw new Error("ADMIN_PIN cannot be the default insecure value '1234' in production!");
+} else {
+  const cleanPin = ADMIN_PIN.trim();
+  const isNumericOnly = /^\d+$/.test(cleanPin);
+  const isWeakPattern = /^(0123|1234|2345|3456|4567|5678|6789|1111|2222|3333|4444|5555|6666|7777|8888|9999|0000|123456|1234)$/.test(cleanPin);
+  
+  if (cleanPin.length < 6 || (isNumericOnly && isWeakPattern)) {
+    if (process.env.NODE_ENV === "production" || process.env.RENDER) {
+      throw new Error("CRITICAL: ADMIN_PIN is too weak! Must be at least 6 characters and not a sequential or repeating pattern (e.g. 1234, 123456, 111111).");
+    } else {
+      console.warn("[security] WARNING: ADMIN_PIN is weak! Consider setting a stronger non-sequential PIN.");
+    }
   }
 }
 
@@ -181,41 +220,45 @@ function safeCompare(a, b) {
   const aBuf = Buffer.from(a);
   const bBuf = Buffer.from(b);
   if (aBuf.length !== bBuf.length) {
-    // Run comparison on dummy to prevent timing attack side-channel
+    // Fake comparison to prevent timing leak on length
     crypto.timingSafeEqual(aBuf, aBuf);
     return false;
   }
   return crypto.timingSafeEqual(aBuf, bBuf);
 }
 
-// Simple in-memory rate limiting map for login / admin PIN verification
-const failedAttempts = new Map(); // IP -> { count: number, lockUntil: number }
-
+// Persistent rate limiting lockout functions tied directly to the database state
 function isRateLimited(ip) {
-  const record = failedAttempts.get(ip);
+  if (!db.failedAttempts) db.failedAttempts = {};
+  const record = db.failedAttempts[ip];
   if (!record) return false;
   if (record.lockUntil > Date.now()) {
     return true;
   }
-  // Lock expired, clean up
   if (record.lockUntil > 0) {
-    failedAttempts.delete(ip);
+    delete db.failedAttempts[ip];
+    saveDb();
   }
   return false;
 }
 
 function registerFailedAttempt(ip) {
-  const record = failedAttempts.get(ip) || { count: 0, lockUntil: 0 };
+  if (!db.failedAttempts) db.failedAttempts = {};
+  const record = db.failedAttempts[ip] || { count: 0, lockUntil: 0 };
   record.count += 1;
   if (record.count >= 5) {
     record.lockUntil = Date.now() + 15 * 60 * 1000; // 15 minute lockout
     console.warn(`[security] IP ${ip} has been rate-limited/locked out due to excessive failed attempts.`);
   }
-  failedAttempts.set(ip, record);
+  db.failedAttempts[ip] = record;
+  saveDb();
 }
 
 function resetFailedAttempts(ip) {
-  failedAttempts.delete(ip);
+  if (db.failedAttempts && db.failedAttempts[ip]) {
+    delete db.failedAttempts[ip];
+    saveDb();
+  }
 }
 
 // HTTP server to handle verification & static health checks
