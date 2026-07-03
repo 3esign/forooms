@@ -5,19 +5,18 @@
 [![Realtime](https://img.shields.io/badge/Realtime-WebSockets-orange?style=flat-square)](#)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](#)
 
-**FOROOMS** is an innovative, collaborative 3D voxel-based urban planning platform. It allows citizens, architects, and planners to download real-world city structures from OpenStreetMap, view them in a responsive 3D WebGL environment, place annotations, initiate discussion threads, and build/modify structures in real-time together.
+**FOROOMS** is a lightweight, participatory **Digital Twin** platform designed to fit into contemporary urban planning and design frameworks. By bridging the gap between high-fidelity GIS data and democratic citizen engagement, FOROOMS allows citizens, architects, and municipal planners to reconstruct real-world city structures from OpenStreetMap (OSM) in a responsive 3D WebGL environment, place annotations, run design simulations, and collaborate on spatial updates in real-time.
 
 ---
 
 ## 🎨 Key Features
 
-* 🚀 **Procedural Voxel Generation**: Translates standard OpenStreetMap (OSM) building footprints and road vectors into stylized 3D voxel islands.
-* 👥 **Multiplayer Sync**: Real-time position tracking, live building modifications, and chat synchronized across all connected players.
-* 💬 **Location-Based Discussion Thread**: Place markers (pins) directly onto base coordinates to start comment threads (with growing marker scales based on reply density).
-* 🗺️ **High-Visibility Satellite MiniMap**: A real-time 2D tracking system styled with Esri World Imagery tiles and high opacity.
-* 🏢 **Dynamic Facades**: Procedurally assigns Concrete Panel, Brick, or Glass Curtain Wall facades deterministically to simulate organic city variance.
-* 🌥️ **Volumetric Shaded Clouds**: Metabal-based procedural cloud clusters hovering at multiple heights.
-* 🌊 **Matte Sea & Horizon Fog**: Matte water texture rendering outside the island boundary with customizable atmospheric fog.
+* 🌐 **Geo-Spatial Digital Twin**: Instantly generates 3D voxel representations of real-world urban environments using OpenStreetMap (OSM) building footprints, heights, and road vectors.
+* 👥 **Collaborative Parametric Urbanism**: Real-time multiplayer synchronization, allowing participants to co-design and modify building heights, colors, and textures instantly in a shared sandbox.
+* 💬 **Geo-Anchored Forums**: Place markers (pins) directly onto base coordinates to start comment threads—acting as localized public forums for site-specific urban issues (markers dynamically scale by reply density).
+* 🗺️ **High-Visibility Satellite MiniMap**: A real-time 2D tracking system styled with Esri World Imagery tiles to align the 3D digital twin with actual geographical contexts.
+* 🏢 **Procedural Urban Facades**: Simulates organic architectural variance by deterministically assigning Concrete Panel, Brick, or Glass Curtain Wall facades based on grid coordinates.
+* 🌥️ **Atmospheric & Visual Scenery**: Metaball-based procedural cloud clusters, fog blending, and custom wave textures to create an immersive, gamified spatial simulation.
 
 ---
 
