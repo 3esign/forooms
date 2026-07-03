@@ -445,6 +445,26 @@ wss.on("connection", (ws, req) => {
             };
             saveDb();
             broadcastAdmins();
+
+            if (RESEND_API_KEY) {
+              try {
+                fetch("https://api.resend.com/emails", {
+                  method: "POST",
+                  headers: {
+                    "Authorization": `Bearer ${RESEND_API_KEY}`,
+                    "Content-Type": "application/json"
+                  },
+                  body: JSON.stringify({
+                    from: "FOROOMS Access <onboarding@resend.dev>",
+                    to: msg.payload.email,
+                    subject: "Your FOROOMS Access Credentials!",
+                    html: `<p>Welcome to FOROOMS! An administrator has created an account for you.</p><p>Your temporary password is: <strong>${rawPass}</strong></p><p><a href="https://forooms.vercel.app">Login Here</a></p>`
+                  })
+                });
+              } catch (e) {
+                console.error("Resend account generation email error", e);
+              }
+            }
           }
           else if (msg.type === "remove_account") {
             delete db.accounts[msg.payload.id];

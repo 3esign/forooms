@@ -10,7 +10,7 @@ import { useAuth } from "../../contexts/AuthContext";
 const AvatarPreview = dynamic(() => import("../../components/voxel/AvatarPreview"), { ssr: false });
 
 export default function AdminDashboard() {
-  const { adminPin, loginAsAdmin } = useAuth();
+  const { adminPin, loginAsAdmin, logout } = useAuth();
   const [pin, setPin] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [accounts, setAccounts] = useState<UserAccount[]>([]);
@@ -41,6 +41,20 @@ export default function AdminDashboard() {
     host: process.env.NEXT_PUBLIC_PARTYKIT_HOST || "localhost:1999",
     room: "admin-auth",
     party: "auth",
+    onOpen: () => {
+      console.log("[admin] Socket opened");
+      const currentPin = pin || adminPin;
+      if (currentPin) {
+        try {
+          socket.send(JSON.stringify({
+            type: "fetch_accounts",
+            payload: { adminPin: currentPin }
+          }));
+        } catch (err) {
+          console.error("[admin] onOpen fetch error:", err);
+        }
+      }
+    },
     onMessage: (e) => {
       console.log("[admin] Socket message received:", e.data);
       try {
@@ -172,9 +186,20 @@ export default function AdminDashboard() {
               <p className="text-sm text-urban-concrete mt-1">Manage users, passwords, and permissions.</p>
             </div>
           </div>
-          <div className="text-sm font-mono text-urban-park flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-urban-park animate-pulse"></span>
-            Connected to PartyKit
+          <div className="flex items-center gap-6">
+            <div className="text-sm font-mono text-urban-park flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-urban-park animate-pulse"></span>
+              Connected to PartyKit
+            </div>
+            <button 
+              onClick={() => {
+                logout();
+                window.location.href = "/";
+              }}
+              className="px-4 py-1.5 bg-urban-brick/20 hover:bg-urban-brick/35 text-urban-brick text-xs font-bold rounded-lg border border-urban-brick/30 transition-all cursor-pointer"
+            >
+              Log Off
+            </button>
           </div>
         </div>
 
@@ -303,13 +328,13 @@ export default function AdminDashboard() {
                           {req.status === "pending" && (
                             <>
                               <button 
-                                onClick={() => handleApproveRequest(req.id)}
+                                onClick={(e) => { e.stopPropagation(); handleApproveRequest(req.id); }}
                                 className="px-3 py-1 bg-urban-park/20 hover:bg-urban-park/35 text-urban-park text-xs font-semibold rounded transition-all cursor-pointer"
                               >
                                 Approve
                               </button>
                               <button 
-                                onClick={() => handleRejectRequest(req.id)}
+                                onClick={(e) => { e.stopPropagation(); handleRejectRequest(req.id); }}
                                 className="px-2.5 py-1 bg-urban-brick/20 hover:bg-urban-brick/35 text-urban-brick text-xs font-semibold rounded transition-all cursor-pointer"
                               >
                                 Reject
@@ -317,7 +342,7 @@ export default function AdminDashboard() {
                             </>
                           )}
                           <button 
-                            onClick={() => handleDeleteRequest(req.id)}
+                            onClick={(e) => { e.stopPropagation(); handleDeleteRequest(req.id); }}
                             className="p-1.5 ml-2 text-urban-concrete hover:text-urban-brick bg-white/5 hover:bg-urban-brick/10 rounded-lg transition-all cursor-pointer inline-flex align-middle"
                             title="Delete Request"
                           >

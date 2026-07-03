@@ -495,7 +495,31 @@ export default function Home() {
           {/* Auth & Request Area */}
           <div className="border-t border-urban-concrete/20 pt-6 space-y-4">
             
-            {activeAccount ? (
+            {adminPin ? (
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl bg-urban-blueprint/10 border border-urban-blueprint/20 flex flex-col">
+                  <span className="text-xs text-urban-blueprint uppercase font-bold tracking-wider">Logged in as Administrator</span>
+                  <span className="text-white text-xs mt-1 font-mono">PIN: ******</span>
+                </div>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => window.location.href = "/admin"}
+                    className="flex-1 py-2.5 bg-urban-blueprint/10 hover:bg-urban-blueprint/20 border border-urban-blueprint/20 rounded-xl text-xs font-bold tracking-wide text-urban-blueprint transition-all cursor-pointer text-center"
+                  >
+                    Admin Portal
+                  </button>
+                  <button 
+                    onClick={() => {
+                      logout();
+                      window.location.reload();
+                    }}
+                    className="py-2.5 px-4 bg-urban-brick/10 hover:bg-urban-brick/20 border border-urban-brick/20 rounded-xl text-xs font-bold tracking-wide text-urban-brick transition-all cursor-pointer"
+                  >
+                    Log Off
+                  </button>
+                </div>
+              </div>
+            ) : activeAccount ? (
               <div className="space-y-4">
                 <div className="p-4 rounded-xl bg-urban-park/10 border border-urban-park/20 flex flex-col">
                   <span className="text-xs text-urban-park uppercase font-bold tracking-wider">Logged in as Builder</span>
@@ -507,6 +531,16 @@ export default function Home() {
                     <p className="text-xs text-urban-signal">You do not have permission to create new maps, but you can click on active maps above to join and build.</p>
                   </div>
                 )}
+
+                <button 
+                  onClick={() => {
+                    logout();
+                    window.location.reload();
+                  }}
+                  className="w-full py-2.5 bg-urban-brick/10 hover:bg-urban-brick/20 border border-urban-brick/20 rounded-xl text-xs font-bold tracking-wide text-urban-brick transition-all cursor-pointer"
+                >
+                  Log Off
+                </button>
               </div>
             ) : (
               <div className="space-y-4">
