@@ -48,6 +48,7 @@ export type AuthResponse =
   | { type: "all_forooms", payload: ActiveForoom[] }
   | { type: "all_requests", payload: AccessRequest[] }
   | { type: "request_submitted", payload: string }
+  | { type: "request_approved_success", payload: { email: string; password: string } }
   | { type: "error", payload: string };
 
 export interface PlayerState {

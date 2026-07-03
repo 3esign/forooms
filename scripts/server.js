@@ -598,24 +598,40 @@ wss.on("connection", (ws, req) => {
               saveDb();
               broadcastAdmins();
 
-              if (RESEND_API_KEY) {
-                try {
-                  fetch("https://api.resend.com/emails", {
-                    method: "POST",
-                    headers: {
-                      "Authorization": `Bearer ${RESEND_API_KEY}`,
-                      "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                      from: "FOROOMS Access <onboarding@resend.dev>",
-                      to: reqData.email,
-                      subject: "Your FOROOMS Access has been Approved!",
-                      html: `<p>Welcome to FOROOMS! Your access request has been approved.</p><p>Your temporary password is: <strong>${rawPass}</strong></p><p><a href="https://forooms.vercel.app">Login Here</a></p>`
-                    })
-                  });
-                } catch (e) {
-                  console.error("Resend approval error", e);
+              // Send immediate confirmation back to the approving admin containing the generated password
+              ws.send(JSON.stringify({
+                type: "request_approved_success",
+                payload: {
+                  email: reqData.email,
+                  password: rawPass
                 }
+              }));
+
+              if (RESEND_API_KEY) {
+                fetch("https://api.resend.com/emails", {
+                  method: "POST",
+                  headers: {
+                    "Authorization": `Bearer ${RESEND_API_KEY}`,
+                    "Content-Type": "application/json"
+                  },
+                  body: JSON.stringify({
+                    from: "FOROOMS Access <onboarding@resend.dev>",
+                    to: reqData.email,
+                    subject: "Your FOROOMS Access has been Approved!",
+                    html: `<p>Welcome to FOROOMS! Your access request has been approved.</p><p>Your temporary password is: <strong>${rawPass}</strong></p><p><a href="https://forooms.vercel.app">Login Here</a></p>`
+                  })
+                })
+                .then(res => {
+                  if (!res.ok) {
+                    return res.text().then(text => {
+                      console.error(`[email] Resend delivery failed with status ${res.status}: ${text}`);
+                    });
+                  }
+                  console.log(`[email] Onboarding approval email sent successfully to ${reqData.email}`);
+                })
+                .catch(err => {
+                  console.error("[email] Resend connection error:", err);
+                });
               }
             }
           }

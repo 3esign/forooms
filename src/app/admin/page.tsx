@@ -67,6 +67,9 @@ export default function AdminDashboard() {
           setRequests(data.payload);
         } else if (data.type === "all_forooms") {
           setForooms(data.payload);
+        } else if (data.type === "request_approved_success") {
+          const payload = data.payload as { email: string; password: string };
+          alert(`SUCCESS: Request Approved!\n\nTemporary password for ${payload.email} is:\n${payload.password}\n\nPlease copy this password to share with the user.`);
         } else if (data.type === "error") {
           if (data.payload === "Unauthorized") {
             setIsAuthenticated(false);
