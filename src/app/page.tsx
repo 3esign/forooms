@@ -393,9 +393,14 @@ export default function Home() {
 
   if (isVoxelMode && selectedBbox) {
     const finalRole = isAdmin ? "admin" : (isGuest ? "guest" : "builder");
+    const activeForoom = forooms.find(f => 
+      Math.abs(f.bbox[0] - selectedBbox[0]) < 0.0001 &&
+      Math.abs(f.bbox[1] - selectedBbox[1]) < 0.0001
+    );
+    const roomName = activeForoom ? activeForoom.name : "Union";
     return (
       <div className="w-full h-screen relative">
-        <VoxelCanvas bbox={selectedBbox} onExit={handleExitForoom} role={finalRole} token={sessionToken} />
+        <VoxelCanvas bbox={selectedBbox} onExit={handleExitForoom} role={finalRole} token={sessionToken} roomName={roomName} />
       </div>
     );
   }

@@ -23,7 +23,10 @@ let db = {
   roomEdits: {},
   roomInfoBlocks: {},
   roomAppearances: {},
-  failedAttempts: {}
+  failedAttempts: {},
+  roomLogs: {},
+  roomChats: {},
+  roomSimulations: {}
 };
 
 let pgClient = null;
@@ -81,6 +84,9 @@ async function initDb() {
       if (res.rows.length > 0) {
         db = res.rows[0].data;
         if (!db.failedAttempts) db.failedAttempts = {};
+        if (!db.roomLogs) db.roomLogs = {};
+        if (!db.roomChats) db.roomChats = {};
+        if (!db.roomSimulations) db.roomSimulations = {};
         console.log("Database loaded successfully from PostgreSQL.");
       } else {
         // Initialize row
@@ -115,6 +121,9 @@ function loadLocalDb() {
     try {
       db = JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
       if (!db.failedAttempts) db.failedAttempts = {};
+      if (!db.roomLogs) db.roomLogs = {};
+      if (!db.roomChats) db.roomChats = {};
+      if (!db.roomSimulations) db.roomSimulations = {};
       console.log("Database loaded successfully from local file.");
     } catch (e) {
       console.error("Failed to load db.json, starting fresh", e);
@@ -979,7 +988,8 @@ wss.on("connection", (ws, req) => {
       edits: Object.values(roomEdits),
       infoBlocks: roomInfoBlocks,
       appearance: roomAppearance,
-      logs: [],
+      logs: db.roomLogs[roomName] || [],
+      simulations: db.roomSimulations[roomName] || null,
       players: getPresenceList()
     }));
 
@@ -1052,7 +1062,30 @@ wss.on("connection", (ws, req) => {
           }
         }
         else if (msg.type === "chat") {
+          const chatMsg = {
+            id: crypto.randomUUID(),
+            senderId: ws.state.id,
+            nick: ws.state.nick,
+            email: ws.state.email,
+            message: msg.message,
+            timestamp: Date.now()
+          };
+
+          if (!db.roomChats[roomName]) db.roomChats[roomName] = [];
+          db.roomChats[roomName].push(chatMsg);
+          saveDb();
+
           addLog("chat", `${ws.state.nick}: ${msg.message}`);
+
+          const payload = JSON.stringify({
+            type: "chat",
+            senderId: ws.state.id,
+            message: msg.message,
+            nick: ws.state.nick
+          });
+          for (const client of roomClients) {
+            client.send(payload);
+          }
         }
         else if (msg.type === "admin_change_role") {
           if (ws.state.role === "admin") {
@@ -1077,7 +1110,7 @@ wss.on("connection", (ws, req) => {
             }
           }
         }
-        else if (msg.type === "admin_clear_room") {
+         else if (msg.type === "admin_clear_room") {
           if (ws.state.role === "admin") {
             db.roomEdits[roomName] = {};
             db.roomInfoBlocks[roomName] = {};
@@ -1090,6 +1123,155 @@ wss.on("connection", (ws, req) => {
               client.send(clearPayload);
             }
           }
+        }
+        else if (msg.type === "admin_run_simulation") {
+          if (ws.state.role !== "admin") return;
+
+          console.log(`[simulation] Running simulation for room ${roomName} via ${msg.provider} (${msg.depth})`);
+
+          const currentEdits = Object.values(db.roomEdits[roomName] || {});
+          const currentLogs = db.roomLogs[roomName] || [];
+          
+          const logsText = currentLogs
+            .slice(-40)
+            .map(l => `[${new Date(l.timestamp).toLocaleTimeString()}] ${l.message}`)
+            .join("\n");
+
+          const prompt = `You are a futuristic spatial city simulator. Your task is to project how a specific voxel city block (name: "${roomName}", bounding box: [${bbox.join(", ")}]) will transform under climate change, technological evolution, and urban density in exactly 50 years, 100 years, and 200 years.
+
+Here is the current user-designed block edits:
+${JSON.stringify(currentEdits)}
+
+Recent activity, chats, and logs:
+${logsText}
+
+You MUST return a JSON object with three fields: "50", "100", and "200".
+Each field must be an array of block modifications.
+Each modification must be an object: {"x": number, "y": number, "z": number, "blockId": number} representing the final state of that coordinate.
+Use the following block IDs:
+0: Air (delete block)
+1: Concrete (default building block)
+2: Glass
+3: Park/Grass
+4: Metal/Steel
+5: Asphalt/Road
+6: Solar Panel
+7: Neon / Light
+8: Foliage/Tree
+9: Water
+
+Guidelines:
+1. Focus on placing new futuristic blocks (like solar panels (6), neon lights (7), foliage (8), glass (2)) on top of or around existing concrete structures. E.g. if concrete is at y=5, put solar/neon at y=6.
+2. Limit the output to between 20 and 80 blocks per year timeline.
+3. Project future trends:
+   - 50 years: minor retrofits, green roof gardens, solar arrays.
+   - 100 years: cyberpunk elements, elevated steel/glass sky bridges, high-tech neon markers.
+   - 200 years: extreme adaptation (e.g. rising water levels (9) submerging low levels, post-human nature reclamation (8) growing over structures).
+4. Output ONLY valid JSON in this format:
+{
+  "50": [{"x": 10, "y": 6, "z": 20, "blockId": 6}],
+  "100": [...],
+  "200": [...]
+}
+Do not write any markdown formatting outside of the JSON block.`;
+
+          let model = "google/gemini-2.5-flash";
+          let maxTokens = 3000;
+          if (msg.provider === "openrouter") {
+            if (msg.depth === "light") {
+              model = "google/gemini-2.5-flash";
+              maxTokens = 1500;
+            } else if (msg.depth === "standard") {
+              model = "google/gemini-2.5-flash";
+              maxTokens = 3000;
+            } else {
+              model = "anthropic/claude-3.5-sonnet";
+              maxTokens = 6000;
+            }
+          } else {
+            if (msg.depth === "light") {
+              model = "gpt-4o-mini";
+              maxTokens = 1500;
+            } else if (msg.depth === "standard") {
+              model = "gpt-4o-mini";
+              maxTokens = 3000;
+            } else {
+              model = "gpt-4o";
+              maxTokens = 6000;
+            }
+          }
+
+          const url = msg.provider === "openrouter" 
+            ? "https://openrouter.ai/api/v1/chat/completions" 
+            : "https://api.openai.com/v1/chat/completions";
+
+          const headers = {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${msg.apiKey}`
+          };
+
+          if (msg.provider === "openrouter") {
+            headers["HTTP-Referer"] = "https://forooms.vercel.app";
+            headers["X-Title"] = "FOROOMS Simulation Engine";
+          }
+
+          const body = JSON.stringify({
+            model,
+            max_tokens: maxTokens,
+            messages: [
+              { role: "system", content: "You are a spatial city simulation JSON generator. You output only valid JSON matching the schema." },
+              { role: "user", content: prompt }
+            ]
+          });
+
+          fetch(url, {
+            method: "POST",
+            headers,
+            body
+          })
+          .then(res => {
+            if (!res.ok) throw new Error(`API error: ${res.statusText}`);
+            return res.json();
+          })
+          .then(data => {
+            const reply = data.choices?.[0]?.message?.content || "";
+            const jsonMatch = reply.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) throw new Error("No JSON object found in response");
+            
+            const parsed = JSON.parse(jsonMatch[0]);
+            if (!parsed["50"] || !parsed["100"] || !parsed["200"]) {
+              throw new Error("Missing timeline years in simulation response");
+            }
+
+            db.roomSimulations[roomName] = {
+              "50": parsed["50"],
+              "100": parsed["100"],
+              "200": parsed["200"]
+            };
+            saveDb();
+
+            addLog("simulation", `Admin ran future simulation projection for ${roomName}`);
+
+            const payload = JSON.stringify({
+              type: "simulation_ready",
+              simulations: db.roomSimulations[roomName]
+            });
+            for (const client of roomClients) {
+              client.send(payload);
+            }
+          })
+          .catch(err => {
+            console.error("[simulation] Error running simulation:", err);
+            addLog("simulation_error", `Simulation failed: ${err.message || err.toString()}`);
+            
+            const payload = JSON.stringify({
+              type: "simulation_ready",
+              simulations: db.roomSimulations[roomName] || null
+            });
+            for (const client of roomClients) {
+              client.send(payload);
+            }
+          });
         }
         else if (msg.type === "appearance_update") {
           if (ws.state.role === "admin") {

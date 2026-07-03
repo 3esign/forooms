@@ -16,6 +16,7 @@ import { VoxelMesh, VoxelBlock, MeshedChunk, InfoBlockHighlights, OtherPlayer, P
 import { SimulationAgents } from "./SimulationAgents";
 import { MiniMapUI, MiniMapTracker } from "./MiniMap";
 import { ActivitySidebar } from "./ActivitySidebar";
+import { AiSidebar } from "./AiSidebar";
 import { LayerSwitcher, LayerType } from "./LayerSwitcher";
 import { Player, MovementMode } from "./Player";
 import { LoadingOverlay } from "./LoadingOverlay";
@@ -71,10 +72,16 @@ interface VoxelSceneProps {
   onExit: () => void;
   role: "admin" | "builder" | "guest" | string;
   token?: string | null;
+  roomName: string;
 }
 
-export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
+export function VoxelScene({ bbox, onExit, role, token, roomName }: VoxelSceneProps) {
   const [currentRole, setCurrentRole] = useState(role);
+  const [timeline, setTimeline] = useState<string>("current");
+  const [simulations, setSimulations] = useState<Record<string, VoxelBlock[]> | null>(null);
+  const [simulatedChunksCache, setSimulatedChunksCache] = useState<Record<string, Record<number, Cuboid[]>>>({});
+  const [isSimulationRunning, setIsSimulationRunning] = useState(false);
+
   const [status, setStatus] = useState<"idle" | "fetching" | "projecting" | "rasterizing" | "completed" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const [overlayVisible, setOverlayVisible] = useState(true);
@@ -150,6 +157,9 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
           if (msg.role) {
             setCurrentRole(msg.role);
           }
+          if (msg.simulations) {
+            setSimulations(msg.simulations);
+          }
           const loadedEdits: VoxelBlock[] = [];
           msg.edits.forEach((edit: any) => {
             loadedEdits.push({ x: edit.x, y: edit.y, z: edit.z, blockId: edit.blockId });
@@ -183,6 +193,11 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
           if (msg.logs) setLogs(msg.logs);
         } else if (msg.type === "role_updated") {
           if (msg.newRole) setCurrentRole(msg.newRole);
+        } else if (msg.type === "simulation_ready") {
+          setIsSimulationRunning(false);
+          setSimulations(msg.simulations);
+          setSimulatedChunksCache({});
+          alert("Future simulation complete! You can now use the Year Selector to preview 50, 100, and 200 year projections.");
         } else if (msg.type === "appearance_update") {
           if (msg.appearance) setAppearance(msg.appearance);
         } else if (msg.type === "info_update") {
@@ -450,7 +465,33 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
     socket?.send(JSON.stringify({ type: "chat", message }));
   }, [socket]);
 
+  const handleRunSimulation = useCallback((provider: string, apiKey: string, depth: string) => {
+    setIsSimulationRunning(true);
+    socket?.send(JSON.stringify({
+      type: "admin_run_simulation",
+      provider,
+      apiKey,
+      depth
+    }));
+  }, [socket]);
+
+  const handleTimelineChange = useCallback((year: string) => {
+    setTimeline(year);
+    if (year !== "current" && simulations && simulations[year] && !simulatedChunksCache[year] && cleanGridRef.current) {
+      const tempGrid = cleanGridRef.current.clone();
+      simulations[year].forEach(edit => {
+        tempGrid.setVoxel(edit.x, edit.y, edit.z, edit.blockId);
+      });
+      const chunks = greedyMeshGrid(tempGrid);
+      setSimulatedChunksCache(prev => ({
+        ...prev,
+        [year]: chunks
+      }));
+    }
+  }, [simulations, simulatedChunksCache]);
+
   const handleInteract = useCallback((hit: THREE.Intersection | null, button: number) => {
+    if (timeline !== "current") return;
     if (!hit) return;
 
     // Check if we hit a pin directly
@@ -565,7 +606,7 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
         }));
       }
     }
-  }, [infoBlocks, currentRole, activeLayer, socket, applyVoxelEdit, hotbarIndex]);
+  }, [infoBlocks, currentRole, activeLayer, socket, applyVoxelEdit, hotbarIndex, timeline]);
 
   const handleSaveInfo = (newText: string) => {
     if (!interactTarget) return;
@@ -577,7 +618,9 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
     setIsInfoModalOpen(false);
   };
 
-  const currentChunks = activeLayer === "playground" ? editedMeshedChunks : originalMeshedChunks;
+  const currentChunks = timeline === "current"
+    ? (activeLayer === "playground" ? editedMeshedChunks : originalMeshedChunks)
+    : (simulatedChunksCache[timeline] || originalMeshedChunks);
 
   return (
     <div className="w-full h-full relative bg-[#87CEEB]">
@@ -600,7 +643,42 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
           >
             &larr; MAP
           </button>
-          <div className="bg-black/50 text-white px-4 py-2 rounded backdrop-blur-sm border border-white/10 text-sm font-mono flex items-center gap-2">
+        </div>
+      )}
+
+      {/* Year Timeline Selector */}
+      {!overlayVisible && simulations && (
+        <div 
+          className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-black/60 border border-urban-concrete/30 rounded-xl px-4 py-2 backdrop-blur-md shadow-2xl flex items-center gap-4 pointer-events-auto"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <span className="text-xxs font-bold uppercase tracking-wider text-urban-concrete">Timeline:</span>
+          <div className="flex gap-1.5">
+            {[
+              { id: "current", label: "Present" },
+              { id: "50", label: "+50 Years" },
+              { id: "100", label: "+100 Years" },
+              { id: "200", label: "+200 Years" }
+            ].map(y => (
+              <button
+                key={y.id}
+                onClick={() => handleTimelineChange(y.id)}
+                className={`px-3 py-1 rounded-md text-xxs font-bold uppercase tracking-wider transition-all cursor-pointer border
+                  ${timeline === y.id 
+                    ? 'bg-urban-blueprint border-urban-blueprint text-white shadow-[0_0_10px_rgba(47,129,247,0.4)]' 
+                    : 'bg-white/5 border-urban-concrete/10 text-urban-concrete hover:bg-white/10 hover:text-white'
+                  }`}
+              >
+                {y.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!overlayVisible && (
+        <div className="absolute top-4 right-4 z-10 bg-black/50 text-white px-4 py-2 rounded backdrop-blur-sm border border-white/10 text-sm font-mono flex items-center gap-2">
             <span>{isLocked ? "🔒 WASD + Mouse" : "🔓 Click to look around"}</span>
             <span className="text-white/40">|</span>
             <span className={`uppercase text-xs px-2 py-0.5 rounded ${movementMode === "fps" ? "bg-urban-blueprint/30 text-urban-blueprint" : "bg-urban-signal/30 text-urban-signal"}`}>
@@ -612,7 +690,6 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
               <span className="w-2 h-2 rounded-full bg-urban-signal animate-pulse" /> LIVE
             </span>
           </div>
-        </div>
       )}
 
       <Canvas shadows camera={{ fov: 60, near: 0.1, far: 2000 }}>
@@ -790,6 +867,20 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
             players={players.map(p => ({ ...p, isOnline: true }))} 
             logs={logs} 
             onSendChat={handleSendChat}
+          />
+        </div>
+      )}
+
+      {/* AI Sidebar Overlay */}
+      {controlsEnabled && (
+        <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+          <AiSidebar 
+            currentRole={currentRole}
+            isSimulationRunning={isSimulationRunning}
+            onRunSimulation={handleRunSimulation}
+            logs={logs}
+            roomName={roomName}
+            bbox={bbox}
           />
         </div>
       )}
