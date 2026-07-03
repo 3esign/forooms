@@ -79,6 +79,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem("activeAccount");
       localStorage.removeItem("adminPin");
       localStorage.removeItem("admin_auto_login");
+      try {
+        const google = (window as any).google;
+        if (google?.accounts?.id) {
+          google.accounts.id.disableAutoSelect();
+          console.log("[auth] Disabled Google GSI auto-select");
+        }
+      } catch (err) {
+        console.error("Failed to disable Google auto-select:", err);
+      }
     }
   };
 

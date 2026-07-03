@@ -504,8 +504,11 @@ wss.on("connection", (ws, req) => {
 
           if (isAdminEmail) {
             // Auto-create/update admin account in db.accounts
-            let adminAcc = Object.values(db.accounts).find(a => a.email.toLowerCase() === email);
-            if (!adminAcc) {
+            let dbUpdated = false;
+            let adminAcc;
+            let adminAccEntry = Object.entries(db.accounts).find(([key, val]) => val.email.toLowerCase() === email);
+
+            if (!adminAccEntry) {
               const accId = crypto.randomUUID();
               adminAcc = {
                 id: "admin",
@@ -520,6 +523,26 @@ wss.on("connection", (ws, req) => {
                 googlePicture: googleUser.picture
               };
               db.accounts[accId] = adminAcc;
+              dbUpdated = true;
+            } else {
+              const [accId, existingAcc] = adminAccEntry;
+              adminAcc = existingAcc;
+              // Force admin privileges if they were registered differently before
+              if (adminAcc.id !== "admin") {
+                adminAcc.id = "admin";
+                dbUpdated = true;
+              }
+              if (!adminAcc.canCreateForoom) {
+                adminAcc.canCreateForoom = true;
+                dbUpdated = true;
+              }
+              if (!adminAcc.googlePicture && googleUser.picture) {
+                adminAcc.googlePicture = googleUser.picture;
+                dbUpdated = true;
+              }
+            }
+
+            if (dbUpdated) {
               saveDb();
             }
 

@@ -638,6 +638,14 @@ export default function Home() {
               {!(activeAccount || adminPin) && (
                 <div className="border-t border-urban-concrete/20 pt-6 space-y-4">
                   <div className="space-y-4">
+                    {/* Guest Mode Indicator */}
+                    <div className="p-3 bg-white/5 border border-white/10 rounded-xl text-center space-y-1.5">
+                      <p className="text-xs text-urban-concrete font-bold uppercase tracking-wider">Guest Mode</p>
+                      <p className="text-[11px] text-white/50 leading-relaxed">
+                        You are browsing as a guest. Authenticate with Google below to access creator features or admin tools.
+                      </p>
+                    </div>
+
                     {/* Connection status indicator */}
                     {connectionStatus !== "connected" && (
                       <div className="p-2 bg-urban-signal/10 border border-urban-signal/20 rounded-lg text-center">
@@ -672,7 +680,6 @@ export default function Home() {
                       onClick={() => {
                         logout();
                         setLoginError("");
-                        window.location.reload();
                       }}
                       className="w-full py-2 text-[10px] text-urban-concrete hover:text-white transition-all cursor-pointer uppercase tracking-wider font-bold"
                     >
@@ -767,7 +774,6 @@ export default function Home() {
                 onClick={() => {
                   logout();
                   setSidebarTab("home");
-                  window.location.reload();
                 }}
                 className="w-full py-2.5 bg-urban-brick/10 hover:bg-urban-brick/20 border border-urban-brick/20 rounded-xl text-xs font-bold tracking-wide text-urban-brick transition-all cursor-pointer"
               >
@@ -804,7 +810,6 @@ export default function Home() {
                   onClick={() => {
                     logout();
                     setSidebarTab("home");
-                    window.location.reload();
                   }}
                   className="py-3 px-4 bg-urban-brick/10 hover:bg-urban-brick/20 border border-urban-brick/20 rounded-xl text-xs font-bold tracking-wide text-urban-brick transition-all cursor-pointer"
                 >
