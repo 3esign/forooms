@@ -30,6 +30,7 @@ export default function Home() {
 
   const { activeAccount, authSessionToken, adminPin, login, loginAsAdmin, logout } = useAuth();
   const [authTab, setAuthTab] = useState<"login" | "request">("login");
+  const [sidebarTab, setSidebarTab] = useState<"home" | "profile" | "admin">("home");
   
   // Login fields
   const [loginEmail, setLoginEmail] = useState("");
@@ -60,6 +61,16 @@ export default function Home() {
       localStorage.removeItem("admin_auto_login");
     }
   }, [loginAsAdmin]);
+
+  useEffect(() => {
+    if (activeAccount) {
+      setSidebarTab("profile");
+    } else if (adminPin) {
+      setSidebarTab("admin");
+    } else {
+      setSidebarTab("home");
+    }
+  }, [activeAccount, adminPin]);
 
   const socket = usePartySocket({
     host: process.env.NEXT_PUBLIC_PARTYKIT_HOST || "localhost:1999",
@@ -318,237 +329,383 @@ export default function Home() {
           <p className="text-xs font-mono text-urban-concrete">Institute for Applied Design Intelligence</p>
         </div>
 
+        {/* Tab Navigation (Only shown when logged in) */}
+        {(activeAccount || adminPin) && (
+          <div className="flex border-b border-urban-concrete/20 bg-urban-void/50 shrink-0 font-mono">
+            <button
+              onClick={() => setSidebarTab("home")}
+              className={`flex-1 py-3 text-center text-xs font-bold tracking-wider transition-all border-b-2 cursor-pointer
+                ${sidebarTab === "home" 
+                  ? "border-urban-blueprint text-white bg-white/5" 
+                  : "border-transparent text-urban-concrete hover:text-white"}`}
+            >
+              🌐 HOME
+            </button>
+            <button
+              onClick={() => setSidebarTab("profile")}
+              className={`flex-1 py-3 text-center text-xs font-bold tracking-wider transition-all border-b-2 cursor-pointer
+                ${sidebarTab === "profile" 
+                  ? "border-urban-park text-white bg-white/5" 
+                  : "border-transparent text-urban-concrete hover:text-white"}`}
+            >
+              👤 PROFILE
+            </button>
+            {adminPin && (
+              <button
+                onClick={() => setSidebarTab("admin")}
+                className={`flex-1 py-3 text-center text-xs font-bold tracking-wider transition-all border-b-2 cursor-pointer
+                  ${sidebarTab === "admin" 
+                    ? "border-urban-signal text-white bg-white/5" 
+                    : "border-transparent text-urban-concrete hover:text-white"}`}
+              >
+                ⚙️ ADMIN
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
           
-          {/* Search Box */}
-          <form onSubmit={handleSearch} className="flex gap-2">
-            <input
-              type="text"
-              placeholder="Search location..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 bg-white/5 border border-urban-concrete/20 rounded-xl px-4 py-3 text-sm text-white placeholder:text-urban-concrete focus:outline-none focus:border-urban-blueprint transition-all"
-            />
-            <button
-              type="submit"
-              disabled={isSearching}
-              className="bg-urban-blueprint/20 border border-urban-blueprint/40 hover:border-urban-blueprint hover:bg-urban-blueprint/30 text-white rounded-xl px-5 py-3 text-sm font-semibold font-mono uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer"
-            >
-              {isSearching ? "..." : "Go"}
-            </button>
-          </form>
-
-          {/* Active Forums List */}
-          <div className="space-y-3">
-            <h3 className="text-xs uppercase tracking-widest font-semibold text-urban-concrete flex items-center gap-2">
-              <ClipboardList className="w-4 h-4" />
-              Active Forooms ({forooms.length})
-            </h3>
-
-            {connectionStatus === "connecting" && (
-              <div className="p-3 bg-urban-blueprint/5 border border-urban-blueprint/20 rounded-xl flex items-start gap-3 animate-pulse">
-                <div className="w-2.5 h-2.5 rounded-full bg-urban-blueprint animate-ping shrink-0 mt-1" />
-                <div className="text-xxs text-urban-concrete leading-normal">
-                  <strong className="text-white">Connecting to Realtime Engine...</strong>
-                  <p className="mt-0.5">Render free-tier servers sleep when idle. Cold boot may take 30–50 seconds. Thanks for your patience!</p>
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
-              {forooms.map((f, i) => (
-                <div 
-                  key={f.id}
-                  onClick={() => {
-                    setSelectedBbox(f.bbox);
-                    setMapCenter([(f.bbox[0] + f.bbox[2])/2, (f.bbox[1] + f.bbox[3])/2]);
-                  }}
-                  className={`p-3 rounded-lg border transition-all cursor-pointer flex items-center justify-between hover:bg-white/5
-                    ${selectedBbox && Math.abs(selectedBbox[0] - f.bbox[0]) < 0.0001 
-                      ? "border-urban-blueprint bg-urban-blueprint/5" 
-                      : "border-urban-concrete/10 bg-white/5"}`}
+          {sidebarTab === "home" && (
+            <>
+              {/* Search Box */}
+              <form onSubmit={handleSearch} className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Search location..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="flex-1 bg-white/5 border border-urban-concrete/20 rounded-xl px-4 py-3 text-sm text-white placeholder:text-urban-concrete focus:outline-none focus:border-urban-blueprint transition-all"
+                />
+                <button
+                  type="submit"
+                  disabled={isSearching}
+                  className="bg-urban-blueprint/20 border border-urban-blueprint/40 hover:border-urban-blueprint hover:bg-urban-blueprint/30 text-white rounded-xl px-5 py-3 text-sm font-semibold font-mono uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer"
                 >
-                  <div>
-                    <div className="text-sm font-bold text-white flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-urban-park" />
-                      {f.name}
+                  {isSearching ? "..." : "Go"}
+                </button>
+              </form>
+
+              {/* Active Forums List */}
+              <div className="space-y-3">
+                <h3 className="text-xs uppercase tracking-widest font-semibold text-urban-concrete flex items-center gap-2">
+                  <ClipboardList className="w-4 h-4" />
+                  Active Forooms ({forooms.length})
+                </h3>
+
+                {connectionStatus === "connecting" && (
+                  <div className="p-3 bg-urban-blueprint/5 border border-urban-blueprint/20 rounded-xl flex items-start gap-3 animate-pulse">
+                    <div className="w-2.5 h-2.5 rounded-full bg-urban-blueprint animate-ping shrink-0 mt-1" />
+                    <div className="text-xxs text-urban-concrete leading-normal">
+                      <strong className="text-white">Connecting to Realtime Engine...</strong>
+                      <p className="mt-0.5">Render free-tier servers sleep when idle. Cold boot may take 30–50 seconds. Thanks for your patience!</p>
                     </div>
-                    <div className="text-xxs text-urban-concrete mt-0.5">By: {f.creatorEmail}</div>
                   </div>
-                  <div className="flex gap-1">
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const url = `${window.location.origin}/?foroom=${f.id}`;
-                        navigator.clipboard.writeText(url);
-                        alert("Link copied to clipboard!");
+                )}
+
+                <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                  {forooms.map((f) => (
+                    <div 
+                      key={f.id}
+                      onClick={() => {
+                        setSelectedBbox(f.bbox);
+                        setMapCenter([(f.bbox[0] + f.bbox[2])/2, (f.bbox[1] + f.bbox[3])/2]);
                       }}
-                      className="p-1.5 bg-urban-concrete/10 hover:bg-urban-concrete/20 rounded text-urban-concrete hover:text-white transition-all"
-                      title="Copy Link"
+                      className={`p-3 rounded-lg border transition-all cursor-pointer flex items-center justify-between hover:bg-white/5
+                        ${selectedBbox && Math.abs(selectedBbox[0] - f.bbox[0]) < 0.0001 
+                          ? "border-urban-blueprint bg-urban-blueprint/5" 
+                          : "border-urban-concrete/10 bg-white/5"}`}
                     >
-                      🔗
-                    </button>
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (activeAccount) {
-                          setSelectedBbox(f.bbox);
-                          setIsGuest(false);
-                          setIsVoxelMode(true);
-                        } else {
-                          handleEnterGuest(f.bbox);
-                        }
-                      }}
-                      className="p-1.5 bg-urban-concrete/10 hover:bg-urban-concrete/20 rounded text-urban-concrete hover:text-white transition-all"
-                      title="Visit"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-              {forooms.length === 0 && (
-                <p className="text-xs text-urban-concrete italic py-2">No active forums yet.</p>
-              )}
-            </div>
-          </div>
-
-          {/* Target Region Status & Creation Panel */}
-          {selectedBbox && (
-            <div className="p-6 rounded-xl border border-urban-blueprint bg-urban-blueprint/5 space-y-4">
-              <h3 className="text-xs uppercase tracking-widest font-semibold text-urban-concrete">Selected Region</h3>
-              
-              {/* Show name if it's already an active Foroom */}
-              {(() => {
-                const foroom = forooms.find(f => 
-                  Math.abs(f.bbox[0] - selectedBbox[0]) < 0.0001 &&
-                  Math.abs(f.bbox[1] - selectedBbox[1]) < 0.0001
-                );
-                return foroom ? (
-                  <div className="text-sm font-bold text-white">Foroom: {foroom.name}</div>
-                ) : (
-                  canDraw && (
-                    <div className="space-y-2">
-                      <label className="block text-xs text-urban-concrete">Foroom Name</label>
-                      <input 
-                        type="text"
-                        placeholder="e.g. Town Square"
-                        value={newForoomName}
-                        onChange={e => setNewForoomName(e.target.value)}
-                        className="w-full bg-urban-void border border-urban-concrete/20 rounded-lg px-3 py-1.5 text-sm text-white focus:border-urban-blueprint transition-all outline-none"
-                      />
-                    </div>
-                  )
-                );
-              })()}
-
-              {!forooms.some(f => Math.abs(f.bbox[0] - selectedBbox[0]) < 0.0001) && (
-                <div className="pt-2 border-t border-urban-concrete/10">
-                  {prefetchStatus === "idle" && (
-                    <button
-                      type="button"
-                      onClick={handlePrefetch}
-                      className="w-full py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-lg text-xs font-mono uppercase transition-all cursor-pointer"
-                    >
-                      Prefetch OSM Data
-                    </button>
-                  )}
-                  {prefetchStatus === "fetching" && (
-                    <p className="text-xs text-urban-concrete font-mono animate-pulse">Fetching raw geometry...</p>
-                  )}
-                  {prefetchStatus === "completed" && prefetchStats && (
-                    <div className="text-xs font-mono space-y-1">
-                      <p className="text-urban-park font-bold">✓ Prefetch Successful</p>
-                      <p className="text-white">Found: {prefetchStats.buildings} buildings, {prefetchStats.roads} roads</p>
-                    </div>
-                  )}
-                  {prefetchStatus === "error" && (
-                    <button
-                      type="button"
-                      onClick={handlePrefetch}
-                      className="w-full py-2 bg-urban-brick/20 border border-urban-brick/40 text-white rounded-lg text-xs font-mono uppercase transition-all cursor-pointer"
-                    >
-                      Retry Prefetch
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Action buttons for Selected Bbox */}
-              <div className="space-y-2 pt-2">
-                {(() => {
-                  const isExistingForoom = forooms.some(f => Math.abs(f.bbox[0] - selectedBbox[0]) < 0.0001);
-                  
-                  return (
-                    <>
-                      {isExistingForoom && (
+                      <div>
+                        <div className="text-sm font-bold text-white flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-urban-park" />
+                          {f.name}
+                        </div>
+                        <div className="text-xxs text-urban-concrete mt-0.5">By: {f.creatorEmail}</div>
+                      </div>
+                      <div className="flex gap-1">
                         <button 
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const url = `${window.location.origin}/?foroom=${f.id}`;
+                            navigator.clipboard.writeText(url);
+                            alert("Link copied to clipboard!");
+                          }}
+                          className="p-1.5 bg-urban-concrete/10 hover:bg-urban-concrete/20 rounded text-urban-concrete hover:text-white transition-all"
+                          title="Copy Link"
+                        >
+                          🔗
+                        </button>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
                             if (activeAccount) {
+                              setSelectedBbox(f.bbox);
                               setIsGuest(false);
                               setIsVoxelMode(true);
                             } else {
-                              handleEnterGuest();
+                              handleEnterGuest(f.bbox);
                             }
                           }}
-                          className="w-full py-3 bg-urban-concrete/20 hover:bg-urban-concrete/30 text-white rounded-xl font-bold tracking-wide transition-all flex items-center justify-center gap-2 cursor-pointer text-sm"
+                          className="p-1.5 bg-urban-concrete/10 hover:bg-urban-concrete/20 rounded text-urban-concrete hover:text-white transition-all"
+                          title="Visit"
                         >
-                          {activeAccount ? "Enter Room" : "Enter as Guest"}
-                          <ChevronRight className="w-4 h-4" />
+                          <Eye className="w-4 h-4" />
                         </button>
-                      )}
-                      
-                      {activeAccount?.canCreateForoom && (
-                        <button 
-                          onClick={handleCreateForoom}
-                          className="w-full py-3 bg-urban-blueprint hover:bg-blue-500 text-white rounded-xl font-bold tracking-wide transition-all flex items-center justify-center gap-2 cursor-pointer text-sm shadow-[0_0_20px_rgba(47,129,247,0.3)]"
-                        >
-                          {isExistingForoom ? "Enter Creator Server" : "Initialize Voxel Server"}
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
-                      )}
-                    </>
-                  );
-                })()}
+                      </div>
+                    </div>
+                  ))}
+                  {forooms.length === 0 && (
+                    <p className="text-xs text-urban-concrete italic py-2">No active forums yet.</p>
+                  )}
+                </div>
               </div>
-            </div>
+
+              {/* Target Region Status & Creation Panel */}
+              {selectedBbox && (
+                <div className="p-6 rounded-xl border border-urban-blueprint bg-urban-blueprint/5 space-y-4">
+                  <h3 className="text-xs uppercase tracking-widest font-semibold text-urban-concrete">Selected Region</h3>
+                  
+                  {(() => {
+                    const foroom = forooms.find(f => 
+                      Math.abs(f.bbox[0] - selectedBbox[0]) < 0.0001 &&
+                      Math.abs(f.bbox[1] - selectedBbox[1]) < 0.0001
+                    );
+                    return foroom ? (
+                      <div className="text-sm font-bold text-white">Foroom: {foroom.name}</div>
+                    ) : (
+                      canDraw && (
+                        <div className="space-y-2">
+                          <label className="block text-xs text-urban-concrete">Foroom Name</label>
+                          <input 
+                            type="text"
+                            placeholder="e.g. Town Square"
+                            value={newForoomName}
+                            onChange={e => setNewForoomName(e.target.value)}
+                            className="w-full bg-urban-void border border-urban-concrete/20 rounded-lg px-3 py-1.5 text-sm text-white focus:border-urban-blueprint transition-all outline-none"
+                          />
+                        </div>
+                      )
+                    );
+                  })()}
+
+                  {!forooms.some(f => Math.abs(f.bbox[0] - selectedBbox[0]) < 0.0001) && (
+                    <div className="pt-2 border-t border-urban-concrete/10">
+                      {prefetchStatus === "idle" && (
+                        <button
+                          type="button"
+                          onClick={handlePrefetch}
+                          className="w-full py-2.5 bg-urban-blueprint hover:bg-blue-500 text-white rounded-lg text-xs font-bold tracking-wide transition-all cursor-pointer"
+                        >
+                          Prefetch OSM Data
+                        </button>
+                      )}
+                      {prefetchStatus === "fetching" && (
+                        <p className="text-xs text-urban-blueprint font-medium animate-pulse">Downloading geography vectors...</p>
+                      )}
+                      {prefetchStatus === "completed" && prefetchStats && (
+                        <div className="space-y-2 text-xs">
+                          <p className="text-urban-park font-bold">✓ Prefetch Successful</p>
+                          <p className="text-white">Found: {prefetchStats.buildings} buildings, {prefetchStats.roads} roads</p>
+                        </div>
+                      )}
+                      {prefetchStatus === "error" && (
+                        <div className="space-y-2">
+                          <p className="text-xs text-urban-brick font-medium">⚠️ Prefetch failed</p>
+                          <button
+                            type="button"
+                            onClick={handlePrefetch}
+                            className="w-full py-2 bg-urban-brick/10 border border-urban-brick/20 rounded-lg text-xxs font-bold text-urban-brick transition-all cursor-pointer"
+                          >
+                            Retry Prefetch
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="pt-4 border-t border-urban-concrete/10">
+                    {(() => {
+                      const foroom = forooms.find(f => 
+                        Math.abs(f.bbox[0] - selectedBbox[0]) < 0.0001 &&
+                        Math.abs(f.bbox[1] - selectedBbox[1]) < 0.0001
+                      );
+                      const isExistingForoom = !!foroom;
+                      
+                      return (
+                        <>
+                          {!isExistingForoom && !activeAccount && (
+                            <div className="p-3 bg-urban-signal/10 border border-urban-signal/20 rounded-xl mb-3 text-center">
+                              <p className="text-xxs text-urban-signal">You must log in to initialize new voxel design servers.</p>
+                            </div>
+                          )}
+
+                          {!isExistingForoom && activeAccount && !activeAccount.canCreateForoom && (
+                            <div className="p-3 bg-urban-signal/10 border border-urban-signal/20 rounded-xl mb-3 text-center">
+                              <p className="text-xxs text-urban-signal">You do not have creator permissions to initialize new voxel servers.</p>
+                            </div>
+                          )}
+
+                          {isExistingForoom && (
+                            <button 
+                              onClick={() => {
+                                if (activeAccount) {
+                                  setIsGuest(false);
+                                  setIsVoxelMode(true);
+                                } else {
+                                  handleEnterGuest();
+                                }
+                              }}
+                              className="w-full py-3 bg-urban-concrete/20 hover:bg-urban-concrete/30 text-white rounded-xl font-bold tracking-wide transition-all flex items-center justify-center gap-2 cursor-pointer text-sm"
+                            >
+                              {activeAccount ? "Enter Room" : "Enter as Guest"}
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                          )}
+                          
+                          {activeAccount?.canCreateForoom && (
+                            <button 
+                              onClick={handleCreateForoom}
+                              className="w-full py-3 bg-urban-blueprint hover:bg-blue-500 text-white rounded-xl font-bold tracking-wide transition-all flex items-center justify-center gap-2 cursor-pointer text-sm shadow-[0_0_20px_rgba(47,129,247,0.3)]"
+                            >
+                              {isExistingForoom ? "Enter Creator Server" : "Initialize Voxel Server"}
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+
+              {/* Guest Login/Request inline forms at the bottom */}
+              {!(activeAccount || adminPin) && (
+                <div className="border-t border-urban-concrete/20 pt-6 space-y-4">
+                  {/* Tabs */}
+                  <div className="flex border-b border-urban-concrete/10">
+                    <button 
+                      onClick={() => { setAuthTab("login"); setLoginError(""); setRequestSuccessMsg(""); }}
+                      className={`flex-1 pb-2 text-sm font-bold transition-all border-b-2 cursor-pointer
+                        ${authTab === "login" ? "text-white border-urban-blueprint" : "text-urban-concrete border-transparent"}`}
+                    >
+                      Login
+                    </button>
+                    <button 
+                      onClick={() => { setAuthTab("request"); setLoginError(""); setRequestSuccessMsg(""); }}
+                      className={`flex-1 pb-2 text-sm font-bold transition-all border-b-2 cursor-pointer
+                        ${authTab === "request" ? "text-white border-urban-blueprint" : "text-urban-concrete border-transparent"}`}
+                    >
+                      Request Access
+                    </button>
+                  </div>
+
+                  {authTab === "login" ? (
+                    <form onSubmit={handleLogin} className="space-y-3">
+                      <input 
+                        type="text" 
+                        placeholder="Email or Admin PIN"
+                        value={loginEmail}
+                        onChange={(e) => setLoginEmail(e.target.value)}
+                        className="w-full bg-urban-void border border-urban-concrete/20 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-urban-blueprint transition-all"
+                      />
+                      <input 
+                        type="password" 
+                        placeholder="Password"
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        className="w-full bg-urban-void border border-urban-concrete/20 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-urban-blueprint transition-all"
+                      />
+                      {loginError && <p className="text-xs text-urban-brick font-medium">{loginError}</p>}
+                      <button 
+                        type="submit"
+                        disabled={!loginEmail || !loginPassword}
+                        className="w-full py-2.5 bg-urban-blueprint/25 hover:bg-urban-blueprint/40 text-white rounded-xl text-sm font-bold tracking-wide transition-all disabled:opacity-50 cursor-pointer"
+                      >
+                        Authenticate
+                      </button>
+                    </form>
+                  ) : (
+                    <form onSubmit={handleRequestAccess} className="space-y-3">
+                      <input 
+                        type="text" 
+                        placeholder="Your Nickname / Nick"
+                        value={requestNick}
+                        onChange={(e) => setRequestNick(e.target.value)}
+                        className="w-full bg-urban-void border border-urban-concrete/20 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-urban-blueprint transition-all"
+                        required
+                      />
+                      <input 
+                        type="email" 
+                        placeholder="Your Email"
+                        value={requestEmail}
+                        onChange={(e) => setRequestEmail(e.target.value)}
+                        className="w-full bg-urban-void border border-urban-concrete/20 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-urban-blueprint transition-all"
+                        required
+                      />
+                      <textarea 
+                        placeholder="Why do you want access?"
+                        value={requestDescription}
+                        onChange={(e) => setRequestDescription(e.target.value)}
+                        className="w-full bg-urban-void border border-urban-concrete/20 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-urban-blueprint transition-all h-16 resize-none"
+                        required
+                      />
+
+                      {/* Avatar Customization */}
+                      <div className="bg-[#151515] p-3 rounded-xl border border-white/5 space-y-2">
+                        <div className="text-[10px] font-bold text-urban-concrete uppercase tracking-wider">Configure Avatar</div>
+                        <AvatarPreview color={requestAvatarColor} nodes={requestAvatarNodes} />
+                        <div className="flex gap-2 items-center">
+                          <div className="flex-1">
+                            <label className="text-[10px] text-white/40 block mb-0.5">Avatar Color</label>
+                            <div className="flex items-center gap-2">
+                              <input 
+                                type="color" 
+                                value={requestAvatarColor}
+                                onChange={(e) => setRequestAvatarColor(e.target.value)}
+                                className="w-8 h-8 rounded border border-white/20 bg-transparent cursor-pointer"
+                              />
+                              <span className="text-xs text-white/80 font-mono">{requestAvatarColor}</span>
+                            </div>
+                          </div>
+                          <div className="flex-1">
+                            <label className="text-[10px] text-white/40 block mb-0.5">Body Nodes: {requestAvatarNodes}</label>
+                            <input 
+                              type="range"
+                              min="3"
+                              max="10"
+                              value={requestAvatarNodes}
+                              onChange={(e) => setRequestAvatarNodes(Number(e.target.value))}
+                              className="w-full h-1 bg-urban-void rounded-lg appearance-none cursor-pointer accent-urban-blueprint"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {requestSuccessMsg && <p className="text-xs text-urban-park font-medium">{requestSuccessMsg}</p>}
+                      <button 
+                        type="submit"
+                        disabled={!requestEmail || !requestDescription || !requestNick}
+                        className="w-full py-2.5 bg-urban-blueprint/25 hover:bg-urban-blueprint/40 text-white rounded-xl text-sm font-bold tracking-wide transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+                      >
+                        <Send className="w-4 h-4" /> Send Request
+                      </button>
+                    </form>
+                  )}
+                </div>
+              )}
+            </>
           )}
 
-          {/* Auth & Request Area */}
-          <div className="border-t border-urban-concrete/20 pt-6 space-y-4">
-            
-            {adminPin ? (
-              <div className="space-y-4">
-                <div className="p-4 rounded-xl bg-urban-blueprint/10 border border-urban-blueprint/20 flex flex-col">
-                  <span className="text-xs text-urban-blueprint uppercase font-bold tracking-wider">Logged in as Administrator</span>
-                  <span className="text-white text-xs mt-1 font-mono">PIN: ******</span>
-                </div>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => window.location.href = "/admin"}
-                    className="flex-1 py-2.5 bg-urban-blueprint/10 hover:bg-urban-blueprint/20 border border-urban-blueprint/20 rounded-xl text-xs font-bold tracking-wide text-urban-blueprint transition-all cursor-pointer text-center"
-                  >
-                    Admin Portal
-                  </button>
-                  <button 
-                    onClick={() => {
-                      logout();
-                      window.location.reload();
-                    }}
-                    className="py-2.5 px-4 bg-urban-brick/10 hover:bg-urban-brick/20 border border-urban-brick/20 rounded-xl text-xs font-bold tracking-wide text-urban-brick transition-all cursor-pointer"
-                  >
-                    Log Off
-                  </button>
-                </div>
-              </div>
-            ) : activeAccount ? (
-              <div className="space-y-4 font-mono">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-urban-concrete flex items-center gap-1.5 border-b border-white/10 pb-2">
-                  <User className="w-3.5 h-3.5 text-urban-park" />
-                  Builder Profile
-                </h3>
+          {sidebarTab === "profile" && (
+            <div className="space-y-6 font-mono">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-urban-concrete flex items-center gap-1.5 border-b border-white/10 pb-2">
+                <User className="w-3.5 h-3.5 text-urban-park" />
+                User Profile
+              </h3>
 
+              {activeAccount ? (
                 <div className="p-4 rounded-xl bg-white/5 border border-urban-concrete/20 space-y-4">
                   <div className="flex gap-4 items-center">
                     {activeAccount.avatarColor && activeAccount.avatarNodes ? (
@@ -585,140 +742,92 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
-
-                {!activeAccount.canCreateForoom && (
-                  <div className="p-4 rounded-xl bg-urban-signal/10 border border-urban-signal/20 text-center">
-                    <p className="text-xs text-urban-signal leading-relaxed">
-                      You have permissions to build and annotate existing maps, but you are not authorized to initialize new maps.
-                    </p>
+              ) : adminPin ? (
+                <div className="p-4 rounded-xl bg-white/5 border border-urban-concrete/20 space-y-4">
+                  <div className="flex gap-4 items-center">
+                    <div className="w-16 h-16 bg-black/20 rounded-lg border border-white/10 flex items-center justify-center shrink-0">
+                      <User className="w-8 h-8 text-urban-blueprint" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-[10px] uppercase tracking-wider text-urban-concrete font-bold">Nickname</div>
+                      <div className="text-sm font-bold text-white leading-tight">
+                        Administrator
+                      </div>
+                      <div className="text-[10px] uppercase tracking-wider text-urban-concrete/60 font-bold mt-1">Role</div>
+                      <div className="text-xs text-urban-blueprint font-bold">
+                        Root Admin
+                      </div>
+                    </div>
                   </div>
-                )}
 
+                  <div className="border-t border-white/5 pt-3 space-y-2">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-urban-concrete font-bold">Admin Email</div>
+                      <div className="text-xs text-white/80 mt-0.5 font-mono">admin@forooms.app</div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {activeAccount && !activeAccount.canCreateForoom && (
+                <div className="p-4 rounded-xl bg-urban-signal/10 border border-urban-signal/20 text-center">
+                  <p className="text-xs text-urban-signal leading-relaxed">
+                    You have permissions to build and annotate existing maps, but you are not authorized to initialize new maps.
+                  </p>
+                </div>
+              )}
+
+              <button 
+                onClick={() => {
+                  logout();
+                  setSidebarTab("home");
+                  window.location.reload();
+                }}
+                className="w-full py-2.5 bg-urban-brick/10 hover:bg-urban-brick/20 border border-urban-brick/20 rounded-xl text-xs font-bold tracking-wide text-urban-brick transition-all cursor-pointer"
+              >
+                Log Off
+              </button>
+            </div>
+          )}
+
+          {sidebarTab === "admin" && adminPin && (
+            <div className="space-y-6 font-mono">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-urban-concrete flex items-center gap-1.5 border-b border-white/10 pb-2">
+                <Cpu className="w-3.5 h-3.5 text-urban-signal" />
+                Administrator Console
+              </h3>
+
+              <div className="p-4 rounded-xl bg-urban-blueprint/10 border border-urban-blueprint/20 space-y-4">
+                <div className="text-xs text-white leading-relaxed">
+                  You are authenticated with root administrator privileges. You can manage access requests, accounts, and server rooms via the portal.
+                </div>
+                <div className="text-[10px] uppercase tracking-wider text-urban-concrete font-bold">Access Token</div>
+                <div className="text-xs font-mono text-white/60 bg-black/45 p-2 rounded border border-white/5 truncate">
+                  {authSessionToken || "Locally Configured"}
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => window.location.href = "/admin"}
+                  className="flex-1 py-3 bg-urban-blueprint hover:bg-blue-500 text-white rounded-xl text-xs font-bold tracking-wide transition-all cursor-pointer text-center"
+                >
+                  Enter Admin Portal
+                </button>
                 <button 
                   onClick={() => {
                     logout();
+                    setSidebarTab("home");
                     window.location.reload();
                   }}
-                  className="w-full py-2.5 bg-urban-brick/10 hover:bg-urban-brick/20 border border-urban-brick/20 rounded-xl text-xs font-bold tracking-wide text-urban-brick transition-all cursor-pointer"
+                  className="py-3 px-4 bg-urban-brick/10 hover:bg-urban-brick/20 border border-urban-brick/20 rounded-xl text-xs font-bold tracking-wide text-urban-brick transition-all cursor-pointer"
                 >
                   Log Off
                 </button>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {/* Tabs */}
-                <div className="flex border-b border-urban-concrete/10">
-                  <button 
-                    onClick={() => { setAuthTab("login"); setLoginError(""); setRequestSuccessMsg(""); }}
-                    className={`flex-1 pb-2 text-sm font-bold transition-all border-b-2 cursor-pointer
-                      ${authTab === "login" ? "text-white border-urban-blueprint" : "text-urban-concrete border-transparent"}`}
-                  >
-                    Login
-                  </button>
-                  <button 
-                    onClick={() => { setAuthTab("request"); setLoginError(""); setRequestSuccessMsg(""); }}
-                    className={`flex-1 pb-2 text-sm font-bold transition-all border-b-2 cursor-pointer
-                      ${authTab === "request" ? "text-white border-urban-blueprint" : "text-urban-concrete border-transparent"}`}
-                  >
-                    Request Access
-                  </button>
-                </div>
+            </div>
+          )}
 
-                {authTab === "login" ? (
-                  <form onSubmit={handleLogin} className="space-y-3">
-                    <input 
-                      type="text" 
-                      placeholder="Email or Admin PIN"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      className="w-full bg-urban-void border border-urban-concrete/20 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-urban-blueprint transition-all"
-                    />
-                    <input 
-                      type="password" 
-                      placeholder="Password"
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      className="w-full bg-urban-void border border-urban-concrete/20 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-urban-blueprint transition-all"
-                    />
-                    {loginError && <p className="text-xs text-urban-brick font-medium">{loginError}</p>}
-                    <button 
-                      type="submit"
-                      disabled={!loginEmail || !loginPassword}
-                      className="w-full py-2.5 bg-urban-blueprint/25 hover:bg-urban-blueprint/40 text-white rounded-xl text-sm font-bold tracking-wide transition-all disabled:opacity-50 cursor-pointer"
-                    >
-                      Authenticate
-                    </button>
-                  </form>
-                ) : (
-                  <form onSubmit={handleRequestAccess} className="space-y-3">
-                    <input 
-                      type="text" 
-                      placeholder="Your Nickname / Nick"
-                      value={requestNick}
-                      onChange={(e) => setRequestNick(e.target.value)}
-                      className="w-full bg-urban-void border border-urban-concrete/20 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-urban-blueprint transition-all"
-                      required
-                    />
-                    <input 
-                      type="email" 
-                      placeholder="Your Email"
-                      value={requestEmail}
-                      onChange={(e) => setRequestEmail(e.target.value)}
-                      className="w-full bg-urban-void border border-urban-concrete/20 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-urban-blueprint transition-all"
-                      required
-                    />
-                    <textarea 
-                      placeholder="Why do you want access?"
-                      value={requestDescription}
-                      onChange={(e) => setRequestDescription(e.target.value)}
-                      className="w-full bg-urban-void border border-urban-concrete/20 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-urban-blueprint transition-all h-16 resize-none"
-                      required
-                    />
-
-                    {/* Avatar Customization */}
-                    <div className="bg-[#151515] p-3 rounded-xl border border-white/5 space-y-2">
-                      <div className="text-[10px] font-bold text-urban-concrete uppercase tracking-wider">Configure Avatar</div>
-                      <AvatarPreview color={requestAvatarColor} nodes={requestAvatarNodes} />
-                      <div className="flex gap-2 items-center">
-                        <div className="flex-1">
-                          <label className="text-[10px] text-white/40 block mb-0.5">Avatar Color</label>
-                          <div className="flex items-center gap-2">
-                            <input 
-                              type="color" 
-                              value={requestAvatarColor}
-                              onChange={(e) => setRequestAvatarColor(e.target.value)}
-                              className="w-8 h-8 rounded border border-white/20 bg-transparent cursor-pointer"
-                            />
-                            <span className="text-xs text-white/80 font-mono">{requestAvatarColor}</span>
-                          </div>
-                        </div>
-                        <div className="flex-1">
-                          <label className="text-[10px] text-white/40 block mb-0.5">Body Nodes: {requestAvatarNodes}</label>
-                          <input 
-                            type="range"
-                            min="3"
-                            max="10"
-                            value={requestAvatarNodes}
-                            onChange={(e) => setRequestAvatarNodes(Number(e.target.value))}
-                            className="w-full h-1 bg-urban-void rounded-lg appearance-none cursor-pointer accent-urban-blueprint"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {requestSuccessMsg && <p className="text-xs text-urban-park font-medium">{requestSuccessMsg}</p>}
-                    <button 
-                      type="submit"
-                      disabled={!requestEmail || !requestDescription || !requestNick}
-                      className="w-full py-2.5 bg-urban-blueprint/25 hover:bg-urban-blueprint/40 text-white rounded-xl text-sm font-bold tracking-wide transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
-                    >
-                      <Send className="w-4 h-4" /> Send Request
-                    </button>
-                  </form>
-                )}
-              </div>
-            )}
-          </div>
         </div>
 
         {/* System Status Footer */}
