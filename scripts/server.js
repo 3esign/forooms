@@ -25,10 +25,13 @@ let db = {
 
 let pgClient = null;
 const DATABASE_URL = process.env.DATABASE_URL;
+let dbStatus = "Not Initialized";
+let dbError = null;
 
 async function initDb() {
   if (DATABASE_URL) {
     console.log("DATABASE_URL is set. Connecting to PostgreSQL database...");
+    dbStatus = "Connecting to PostgreSQL...";
     try {
       pgClient = new Client({
         connectionString: DATABASE_URL,
@@ -57,13 +60,19 @@ async function initDb() {
         await pgClient.query("INSERT INTO forooms_store (key, data) VALUES ('current', $1)", [JSON.stringify(db)]);
         console.log("Initialized fresh database in PostgreSQL store.");
       }
+      dbStatus = "Connected to PostgreSQL";
+      dbError = null;
     } catch (err) {
       console.error("Failed to connect or initialize PostgreSQL database, falling back to local file storage:", err);
       pgClient = null;
+      dbStatus = "PostgreSQL Error (Fallback to local file storage)";
+      dbError = err.message || err.toString();
       loadLocalDb();
     }
   } else {
     console.log("No DATABASE_URL set. Using local file storage.");
+    dbStatus = "Local File Storage (db.json)";
+    dbError = null;
     loadLocalDb();
   }
 }
@@ -159,6 +168,16 @@ const server = http.createServer((req, res) => {
 
     res.writeHead(401, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ valid: false }));
+    return;
+  }
+
+  if (parsedUrl.pathname === "/db-status") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ 
+      status: dbStatus, 
+      error: dbError,
+      hasDatabaseUrl: !!DATABASE_URL
+    }, null, 2));
     return;
   }
 
