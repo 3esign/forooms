@@ -641,40 +641,26 @@ export default function Home() {
                   </div>
 
                   {authTab === "login" ? (
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       {/* Google Sign-In Button */}
-                      <div ref={googleBtnRef} className="w-full flex justify-center" />
+                      <div ref={googleBtnRef} className="w-full flex justify-center py-2" />
 
-                      <div className="flex items-center gap-3 my-2">
-                        <div className="flex-1 h-px bg-urban-concrete/20" />
-                        <span className="text-[10px] text-urban-concrete uppercase tracking-wider font-bold">or use credentials</span>
-                        <div className="flex-1 h-px bg-urban-concrete/20" />
-                      </div>
-
-                      <form onSubmit={handleLogin} className="space-y-3">
-                        <input 
-                          type="text" 
-                          placeholder="Email or Admin PIN"
-                          value={loginEmail}
-                          onChange={(e) => setLoginEmail(e.target.value)}
-                          className="w-full bg-urban-void border border-urban-concrete/20 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-urban-blueprint transition-all"
-                        />
-                        <input 
-                          type="password" 
-                          placeholder="Password"
-                          value={loginPassword}
-                          onChange={(e) => setLoginPassword(e.target.value)}
-                          className="w-full bg-urban-void border border-urban-concrete/20 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-urban-blueprint transition-all"
-                        />
-                        {loginError && <p className="text-xs text-urban-brick font-medium">{loginError}</p>}
-                        <button 
-                          type="submit"
-                          disabled={!loginEmail || !loginPassword}
-                          className="w-full py-2.5 bg-urban-blueprint/25 hover:bg-urban-blueprint/40 text-white rounded-xl text-sm font-bold tracking-wide transition-all disabled:opacity-50 cursor-pointer"
-                        >
-                          Authenticate
-                        </button>
-                      </form>
+                      {loginError === "pending_approval" ? (
+                        <div className="p-4 bg-urban-signal/10 border border-urban-signal/25 rounded-xl text-center">
+                          <p className="text-xs text-urban-signal leading-relaxed font-bold">
+                            Access Pending Approval
+                          </p>
+                          <p className="text-[11px] text-white/70 leading-relaxed mt-1">
+                            Your Google account access request is submitted. You will receive an email notification once the administrator grants you permission.
+                          </p>
+                        </div>
+                      ) : (
+                        loginError && (
+                          <div className="p-3 bg-urban-brick/10 border border-urban-brick/20 rounded-xl text-center">
+                            <p className="text-xs text-urban-brick font-medium">{loginError}</p>
+                          </div>
+                        )
+                      )}
                     </div>
                   ) : (
                     <form onSubmit={handleRequestAccess} className="space-y-3">

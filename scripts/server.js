@@ -497,34 +497,81 @@ wss.on("connection", (ws, req) => {
           }
 
           resetFailedAttempts(ip);
+          const email = googleUser.email.toLowerCase();
 
-          // Find or create account
-          let account = Object.values(db.accounts).find(a => a.email === googleUser.email);
-          if (!account) {
-            // Auto-register new Google user
-            const accId = crypto.randomUUID();
-            account = {
-              id: accId,
-              email: googleUser.email,
-              passwordHash: null,
-              passwordSalt: null,
-              canCreateForoom: false,
-              createdAt: Date.now(),
-              nick: googleUser.name,
-              avatarColor: "#" + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, "0"),
-              avatarNodes: Math.floor(Math.random() * 5) + 4,
-              googlePicture: googleUser.picture
-            };
-            db.accounts[accId] = account;
-            saveDb();
-            console.log(`[google] Auto-registered new user: ${googleUser.email}`);
+          // Check if this is the admin (poturaksemir@gmail.com)
+          const isAdminEmail = email === "poturaksemir@gmail.com" || email === ADMIN_EMAIL.toLowerCase();
+
+          if (isAdminEmail) {
+            // Auto-create/update admin account in db.accounts
+            let adminAcc = Object.values(db.accounts).find(a => a.email.toLowerCase() === email);
+            if (!adminAcc) {
+              const accId = crypto.randomUUID();
+              adminAcc = {
+                id: "admin",
+                email: email,
+                passwordHash: null,
+                passwordSalt: null,
+                canCreateForoom: true,
+                createdAt: Date.now(),
+                nick: googleUser.name || "Admin",
+                avatarColor: "#ef4444",
+                avatarNodes: 8,
+                googlePicture: googleUser.picture
+              };
+              db.accounts[accId] = adminAcc;
+              saveDb();
+            }
+
+            // Generate admin session token
+            const sessionToken = crypto.randomUUID();
+            tokens.set(sessionToken, {
+              email: email,
+              role: "admin",
+              nick: adminAcc.nick || "Admin",
+              avatarColor: adminAcc.avatarColor || "#ef4444",
+              avatarNodes: adminAcc.avatarNodes || 8
+            });
+
+            const safeAccount = { ...adminAcc, passwordHash: undefined, passwordSalt: undefined };
+            ws.send(JSON.stringify({ type: "login_success", payload: { account: safeAccount, token: sessionToken } }));
+            return;
           }
 
-          // Generate session token
+          // For all other users, check if their account is approved in db.accounts
+          let account = Object.values(db.accounts).find(a => a.email.toLowerCase() === email);
+          if (!account) {
+            // Account is not approved/registered yet!
+            // Check if there is already a pending request for this email
+            let existingRequest = Object.values(db.requests).find(r => r.email.toLowerCase() === email);
+            if (!existingRequest) {
+              // Automatically submit an access request!
+              const reqId = crypto.randomUUID();
+              db.requests[reqId] = {
+                id: reqId,
+                email: email,
+                description: "Automatic Google Sign-In Access Request",
+                status: "pending",
+                createdAt: Date.now(),
+                nick: googleUser.name || email.split("@")[0],
+                avatarColor: "#" + Math.floor(Math.random() * 16777215).toString(16).padStart(6, "0"),
+                avatarNodes: Math.floor(Math.random() * 5) + 4
+              };
+              saveDb();
+              broadcastAdmins();
+              console.log(`[google] Auto-created access request for new user: ${email}`);
+            }
+
+            // Return pending_approval payload so frontend shows a custom pending status
+            ws.send(JSON.stringify({ type: "login_failed", payload: "pending_approval" }));
+            return;
+          }
+
+          // Generate session token for approved user
           const sessionToken = crypto.randomUUID();
           tokens.set(sessionToken, {
             email: account.email,
-            role: account.canCreateForoom ? "builder" : "builder",
+            role: "builder",
             nick: account.nick || account.email.split("@")[0],
             avatarColor: account.avatarColor || "#3b82f6",
             avatarNodes: account.avatarNodes || 4
@@ -700,8 +747,8 @@ wss.on("connection", (ws, req) => {
                 body: JSON.stringify({
                   from: EMAIL_FROM,
                   to: msg.payload.email,
-                  subject: "Your FOROOMS Access Credentials!",
-                  html: `<p>Welcome to FOROOMS! An administrator has created an account for you.</p><p>Your temporary password is: <strong>${rawPass}</strong></p><p><a href="https://forooms.vercel.app">Login Here</a></p>`
+                  subject: "Your FOROOMS Access is Approved!",
+                  html: `<p>Welcome to FOROOMS! An administrator has granted you builder access.</p><p>You can now sign in using your Google account.</p><p><a href="https://forooms.vercel.app">Sign in with Google Here</a></p>`
                 })
               })
               .then(res => {
@@ -732,13 +779,11 @@ wss.on("connection", (ws, req) => {
             if (reqData) {
               reqData.status = "approved";
               const accId = crypto.randomUUID();
-              const rawPass = generateRandomPassword();
-              const { hash, salt } = hashPassword(rawPass);
               db.accounts[accId] = {
                 id: accId,
                 email: reqData.email,
-                passwordHash: hash,
-                passwordSalt: salt,
+                passwordHash: null,
+                passwordSalt: null,
                 canCreateForoom: false,
                 createdAt: Date.now(),
                 nick: reqData.nick || reqData.email.split("@")[0],
@@ -748,12 +793,12 @@ wss.on("connection", (ws, req) => {
               saveDb();
               broadcastAdmins();
 
-              // Send immediate confirmation back to the approving admin containing the generated password
+              // Send immediate confirmation back to the approving admin
               ws.send(JSON.stringify({
                 type: "request_approved_success",
                 payload: {
                   email: reqData.email,
-                  password: rawPass
+                  password: "Google Sign-In Approved"
                 }
               }));
 
@@ -768,7 +813,7 @@ wss.on("connection", (ws, req) => {
                     from: EMAIL_FROM,
                     to: reqData.email,
                     subject: "Your FOROOMS Access has been Approved!",
-                    html: `<p>Welcome to FOROOMS! Your access request has been approved.</p><p>Your temporary password is: <strong>${rawPass}</strong></p><p><a href="https://forooms.vercel.app">Login Here</a></p>`
+                    html: `<p>Welcome to FOROOMS! Your access request has been approved.</p><p>You can now sign in using your Google account.</p><p><a href="https://forooms.vercel.app">Sign in with Google Here</a></p>`
                   })
                 })
                 .then(res => {
