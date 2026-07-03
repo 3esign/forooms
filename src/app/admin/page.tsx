@@ -62,7 +62,14 @@ export default function AdminDashboard() {
         if (data.type === "all_accounts") {
           setIsAuthenticated(true);
           setAccounts(data.payload);
-          loginAsAdmin(pin);
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pin);
+          if (isUuid) {
+            loginAsAdmin(pin);
+          }
+        } else if (data.type === "admin_token") {
+          setIsAuthenticated(true);
+          setPin(data.payload.token);
+          loginAsAdmin(data.payload.token);
         } else if (data.type === "all_requests") {
           setRequests(data.payload);
         } else if (data.type === "all_forooms") {

@@ -285,8 +285,19 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    const token = parsedUrl.query.token;
-    if (safeCompare(token, ADMIN_PIN)) {
+    let isAdminToken = false;
+    if (token) {
+      if (safeCompare(token, ADMIN_PIN)) {
+        isAdminToken = true;
+      } else if (tokens.has(token)) {
+        const session = tokens.get(token);
+        if (session && session.role === "admin") {
+          isAdminToken = true;
+        }
+      }
+    }
+
+    if (isAdminToken) {
       resetFailedAttempts(ip);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ valid: true, email: "admin", role: "admin" }));
@@ -385,6 +396,14 @@ wss.on("connection", (ws, req) => {
 
           if (safeCompare(clientPassword, ADMIN_PIN)) {
             resetFailedAttempts(ip);
+            const adminToken = crypto.randomUUID();
+            tokens.set(adminToken, {
+              email: "admin@forooms.app",
+              role: "admin",
+              nick: "Admin",
+              avatarColor: "#ef4444",
+              avatarNodes: 8
+            });
             ws.send(JSON.stringify({
               type: "login_success",
               payload: {
@@ -397,7 +416,7 @@ wss.on("connection", (ws, req) => {
                   avatarColor: "#ef4444",
                   avatarNodes: 8
                 },
-                token: ADMIN_PIN
+                token: adminToken
               }
             }));
             return;
@@ -479,7 +498,7 @@ wss.on("connection", (ws, req) => {
           const createToken = msg.payload.token;
           let isAuthorized = false;
 
-          if (createToken === ADMIN_PIN) {
+          if (createToken && safeCompare(createToken, ADMIN_PIN)) {
             isAuthorized = true;
           } else if (createToken && tokens.has(createToken)) {
             const session = tokens.get(createToken);
@@ -528,7 +547,32 @@ wss.on("connection", (ws, req) => {
             return;
           }
 
-          if (!safeCompare(msg.payload.adminPin, ADMIN_PIN)) {
+          const providedPin = msg.payload.adminPin;
+          let isAdminAuthorized = false;
+          let generatedAdminToken = null;
+
+          if (providedPin) {
+            if (safeCompare(providedPin, ADMIN_PIN)) {
+              isAdminAuthorized = true;
+              // Generate secure session token to replace raw PIN cache in browser
+              const adminToken = crypto.randomUUID();
+              tokens.set(adminToken, {
+                email: "admin@forooms.app",
+                role: "admin",
+                nick: "Admin",
+                avatarColor: "#ef4444",
+                avatarNodes: 8
+              });
+              generatedAdminToken = adminToken;
+            } else if (tokens.has(providedPin)) {
+              const session = tokens.get(providedPin);
+              if (session && session.role === "admin") {
+                isAdminAuthorized = true;
+              }
+            }
+          }
+
+          if (!isAdminAuthorized) {
             registerFailedAttempt(ip);
             ws.send(JSON.stringify({ type: "error", payload: "Unauthorized" }));
             return;
@@ -536,6 +580,13 @@ wss.on("connection", (ws, req) => {
           resetFailedAttempts(ip);
 
           adminConnections.add(ws);
+
+          if (generatedAdminToken) {
+            ws.send(JSON.stringify({
+              type: "admin_token",
+              payload: { token: generatedAdminToken }
+            }));
+          }
 
           if (msg.type === "add_account") {
             const accId = crypto.randomUUID();
