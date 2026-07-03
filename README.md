@@ -1,94 +1,188 @@
-# 🏙️ FOROOMS: Participatory Urban Planning in Multiplayer 3D
+# 🏙️ FOROOMS — Participatory Digital Twin for Urban Co-Design
 
+[![Live](https://img.shields.io/badge/Live-forooms.vercel.app-brightgreen?style=flat-square)](https://forooms.vercel.app)
 [![Next.js](https://img.shields.io/badge/Next.js-16.2-black?logo=next.js&style=flat-square)](https://nextjs.org)
-[![Three.js](https://img.shields.io/badge/Three.js-r185-blue?logo=three.js&style=flat-square)](https://threejs.org)
-[![Realtime](https://img.shields.io/badge/Realtime-WebSockets-orange?style=flat-square)](#)
+[![Three.js](https://img.shields.io/badge/Three.js-r185-049ef4?logo=three.js&style=flat-square)](https://threejs.org)
+[![WebSockets](https://img.shields.io/badge/Realtime-WebSockets-orange?style=flat-square)](#architecture)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](#)
 
-**FOROOMS** is a lightweight, participatory **Digital Twin** platform designed to fit into contemporary urban planning and design frameworks. By bridging the gap between high-fidelity GIS data and democratic citizen engagement, FOROOMS allows citizens, architects, and municipal planners to reconstruct real-world city structures from OpenStreetMap (OSM) in a responsive 3D WebGL environment, place annotations, run design simulations, and collaborate on spatial updates in real-time.
+> A lightweight, browser-based **Digital Twin** that turns any OpenStreetMap neighbourhood into a multiplayer 3D sandbox where citizens, architects, and municipal planners co-design urban space in real-time.
+
+<!-- Screenshots will be added here -->
 
 ---
 
-## 🎨 Key Features
+## Why FOROOMS?
 
-* 🌐 **Geo-Spatial Digital Twin**: Instantly generates 3D voxel representations of real-world urban environments using OpenStreetMap (OSM) building footprints, heights, and road vectors.
-* 👥 **Collaborative Parametric Urbanism**: Real-time multiplayer synchronization, allowing participants to co-design and modify building heights, colors, and textures instantly in a shared sandbox.
-* 💬 **Geo-Anchored Forums**: Place markers (pins) directly onto base coordinates to start comment threads—acting as localized public forums for site-specific urban issues (markers dynamically scale by reply density).
-* 🗺️ **High-Visibility Satellite MiniMap**: A real-time 2D tracking system styled with Esri World Imagery tiles to align the 3D digital twin with actual geographical contexts.
-* 🏢 **Procedural Urban Facades**: Simulates organic architectural variance by deterministically assigning Concrete Panel, Brick, or Glass Curtain Wall facades based on grid coordinates.
-* 🌥️ **Atmospheric & Visual Scenery**: Metaball-based procedural cloud clusters, fog blending, and custom wave textures to create an immersive, gamified spatial simulation.
+Traditional urban planning tools are expensive, siloed, and inaccessible to the public. FOROOMS democratises the design process by combining **geo-spatial digital twinning**, **real-time collaboration**, and **gamified voxel building** into a single web application that runs in any modern browser — no downloads, no plugins, no CAD licenses.
+
+It fits into contemporary urban planning and design frameworks as a **participatory design instrument**: a tool for stakeholder workshops, community charrettes, neighbourhood consultations, and rapid spatial prototyping.
 
 ---
 
-## 🏗️ System Architecture
+## ✨ Core Capabilities
 
-```mermaid
-graph TD
-  User([Web Client]) -->|HTTP / API| NextJS[Next.js Frontend on Vercel]
-  NextJS -->|Proxy| OSM[OpenStreetMap API]
-  User -->|WebSocket| StandaloneWS[Standalone WS Server on Render]
-  StandaloneWS -->|State Persist| SQLite[(db.json file)]
+| Capability | Description |
+|---|---|
+| 🌐 **Geo-Spatial Digital Twin** | Procedurally reconstructs real urban geometry from OSM building footprints, heights, and road vectors into a stylised 3D voxel island |
+| 👥 **Multiplayer Co-Design** | Real-time parametric urbanism — multiple participants modify structures, place annotations, and chat in a shared spatial sandbox |
+| 💬 **Geo-Anchored Discussion Threads** | Pin location-specific comments directly onto the 3D model, creating site-anchored public forums with growing visual density |
+| 🗺️ **Satellite Context Map** | Live 2D minimap with Esri World Imagery tiles keeps the digital twin oriented to its real-world geographical context |
+| 🏢 **Procedural Facade Variance** | Deterministic assignment of Concrete Panel, Brick, and Glass Curtain Wall materials simulates organic architectural diversity |
+| 🌊 **Immersive Environment** | Volumetric clouds, atmospheric fog, matte ocean, and island isolation create an engaging spatial simulation |
+| 🔐 **Role-Based Access** | Admin, Builder, and Guest roles with email-based onboarding and an admin approval workflow |
+
+---
+
+## 🏗️ Architecture
+
+FOROOMS is two services that deploy independently:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Web Browser                              │
+│  Next.js Client · Three.js/R3F · MapLibre · PartySocket         │
+└────────────┬──────────────────────────────┬─────────────────────┘
+             │ HTTPS                        │ WSS
+             ▼                              ▼
+┌────────────────────────┐    ┌──────────────────────────────────┐
+│   Vercel (Frontend)    │    │   Render.com (Realtime Server)   │
+│                        │    │                                  │
+│  • Next.js pages       │    │  • Node.js + ws                  │
+│  • /api/osm proxy      │    │  • Auth, rooms, multiplayer      │
+│  • Static assets       │    │  • Voxel edit persistence        │
+│                        │    │  • JSON file storage (db.json)   │
+└────────────────────────┘    └──────────────────────────────────┘
 ```
 
+| Service | What it does | Hosted on | Cost |
+|---|---|---|---|
+| **Frontend** | Map UI, 3D voxel client, OSM proxy | Vercel | Free |
+| **Realtime Server** | Auth, foroom registry, multiplayer sync, voxel edit persistence | Render.com | Free |
+
 ---
 
-## 📂 Codebase Tour
+## 📂 Project Structure
 
 ```
-├── party/                  # Original PartyKit backend code (optional)
-├── scripts/                # Utility and deployment scripts
-│   ├── server.js           # Production standalone WebSocket server
-│   └── DEPLOYMENT.md       # Step-by-step free hosting guide
+forooms/
 ├── src/
-│   ├── app/                # Next.js pages & API routes (/api/osm)
+│   ├── app/                    # Next.js pages & API routes
+│   │   ├── page.tsx            # Homepage — map, login, foroom list
+│   │   ├── admin/page.tsx      # Admin dashboard
+│   │   └── api/osm/route.ts    # Server-side OSM proxy
 │   ├── components/
-│   │   └── voxel/          # Core WebGL client, Player, and Modals
-│   ├── contexts/           # Authentication & role states
+│   │   ├── Map.tsx             # Leaflet map for foroom creation
+│   │   └── voxel/              # 3D engine (13 components)
+│   │       ├── VoxelScene.tsx   # Main scene orchestrator
+│   │       ├── Player.tsx       # FPS controls & collision
+│   │       ├── VoxelMesh.tsx    # Greedy-meshed geometry & clouds
+│   │       └── ...             # Modals, hotbar, minimap, layers
+│   ├── contexts/
+│   │   └── AuthContext.tsx     # Client-side auth state
 │   └── lib/
-│       ├── blocks/         # Facades & Voxel type registries
-│       ├── osm/            # OpenStreetMap parser & parser helper
-│       └── voxel/          # Greedy meshing optimization & algorithms
-├── party.toml              # PartyKit configuration
-└── package.json            # Project entry & build configuration
+│       ├── blocks/             # Block types & facade registry
+│       ├── osm/                # OSM fetch, parse, project
+│       ├── rasterizer/         # Building & tree voxelisation
+│       └── voxel/              # CityGrid, greedy mesher, PRNG
+├── scripts/
+│   └── server.js              # Standalone WebSocket server
+├── party/                     # PartyKit server (legacy, optional)
+├── package.json
+└── README.md
 ```
 
 ---
 
-## ⚡ Quick Start
+## ⚡ Local Development
 
-### 1. Local Development
-
-Start both the frontend and backend locally to test:
-
-#### Terminal 1: Realtime WebSocket Backend
 ```bash
+# 1. Install dependencies
+npm install
+
+# 2. Start the realtime server (Terminal 1)
 npm run start:server
-```
-Runs the standalone WebSocket server on `localhost:1999` with local file persistence.
 
-#### Terminal 2: Next.js Frontend
-```bash
+# 3. Start the Next.js frontend (Terminal 2)
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000) to view the client.
+
+Open **http://localhost:3000**. Log in with your admin PIN (default: `123456` — set via `ADMIN_PIN` in `.env`).
 
 ---
 
-## 🚀 Elegant Git & Deployment Pipelines
+## 🚀 Production Deployment
 
-FOROOMS is designed to leverage **Git-integrated CD (Continuous Deployment)**, which automates deploys without the complexity of manual CI workflows:
+FOROOMS uses **two free hosting services** that auto-deploy from GitHub:
 
-* 🌐 **Frontend (Next.js)**: Host on **Vercel**. By linking your GitHub repository, Vercel automatically deploys preview builds for your branches, and deploys to production whenever you merge to `main`/`master`.
-* 🔌 **Backend (WebSockets)**: Host on **Render.com** (Free tier). Linking your GitHub repository to Render triggers an automatic deployment of the standalone server (`scripts/server.js`) on every push.
+### Step 1 — Deploy the Realtime Server on Render
 
-For complete, click-by-click instructions on setting up your free production server, see the [Render Deployment Guide](file:///c:/Users/treed/OneDrive/Desktop/FOROOMS/scripts/DEPLOYMENT.md).
+1. Go to [render.com](https://render.com) and sign up (free)
+2. Click **New → Web Service** and connect the `3esign/forooms` GitHub repo
+3. Configure:
+   - **Name**: `forooms-server`
+   - **Build Command**: `npm install`
+   - **Start Command**: `npm run start:server`
+   - **Instance Type**: Free
+4. Add **Environment Variables**:
+   - `ADMIN_PIN` = your admin password
+   - `RESEND_API_KEY` = your Resend key (optional, for email notifications)
+5. Click **Deploy** and copy the URL (e.g. `forooms-server.onrender.com`)
+
+### Step 2 — Connect the Frontend on Vercel
+
+1. Go to your Vercel project dashboard for `forooms`
+2. Go to **Settings → Environment Variables**
+3. Set `NEXT_PUBLIC_PARTYKIT_HOST` = `forooms-server.onrender.com` (no `https://`)
+4. **Redeploy** the project (Settings → Deployments → Redeploy)
+
+### Step 3 — Verify
+
+Open [forooms.vercel.app](https://forooms.vercel.app) and check the browser DevTools **Network** tab — you should see WebSocket connections to your Render server.
+
+### After Setup — Updating
+
+Every future change follows this simple flow:
+
+```
+Edit code locally → Test on localhost → Push to GitHub → Both services auto-redeploy
+```
+
+---
+
+## 🔧 Environment Variables
+
+| Variable | Where | Purpose |
+|---|---|---|
+| `NEXT_PUBLIC_PARTYKIT_HOST` | Vercel (build-time) | Points the frontend to the realtime server |
+| `ADMIN_PIN` | Render + local `.env` | Admin authentication password |
+| `RESEND_API_KEY` | Render + local `.env` | Email notifications for access requests (optional) |
 
 ---
 
 ## ⚙️ Technical Highlights
 
-### 1. Greedy Meshing Optimization
-Rather than rendering thousands of individual cubes (which degrades WebGL performance), the meshing algorithm in `mesher.ts` groups adjacent blocks of the same material into large unified cuboids. This reduces the draw-call count by up to **90%**, keeping rendering speeds smooth even on low-end mobile devices.
+### Greedy Meshing
+The voxel renderer groups adjacent blocks of the same material into large cuboids instead of rendering individual cubes. This reduces draw calls by up to **90%**, keeping performance smooth even on mobile.
 
-### 2. Sea & Island Isolation bounds
-The grid calculates `islandBounds` based on OSM coordinates to render a solid grass foundation inside the boundary at `y = -0.49`, while rendering an infinite repeating matte water plane at `y = -0.5` outside the boundary, preventing the sea from clipping into underground structures.
+### Island Isolation
+The grid calculates `islandBounds` from OSM coordinates to render a solid grass foundation inside the boundary (`y = -0.49`) and an infinite water plane outside (`y = -0.5`), creating a natural island effect.
+
+### Procedural Clouds
+Metaball-based volumetric cloud clusters render at multiple sky heights with three-tier shading (white top, off-white middle, blue-gray base).
+
+---
+
+## 🗺️ Roadmap
+
+- [ ] Supabase integration for persistent auth and data
+- [ ] Layer-based design comparison (before/after overlays)
+- [ ] Export to glTF for integration with BIM/GIS tools
+- [ ] AI-assisted spatial analysis and design suggestions
+- [ ] Mobile-responsive touch controls
+
+---
+
+## 📄 License
+
+MIT — free for academic, municipal, and commercial use.
