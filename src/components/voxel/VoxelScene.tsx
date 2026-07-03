@@ -96,6 +96,7 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
   const gridRef = useRef<CityGrid | null>(null);
   const cleanGridRef = useRef<CityGrid | null>(null);
   const pendingEditsRef = useRef<Set<string>>(new Set());
+  const playerPosRef = useRef<{ x: number; y: number; z: number }>({ x: 0, y: 2.0, z: 0 });
 
   const applyVoxelEdit = useCallback((x: number, y: number, z: number, newBlockId: number) => {
     if (!gridRef.current) return;
@@ -389,6 +390,7 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
   }, []);
 
   const handlePlayerMove = useCallback((x: number, y: number, z: number) => {
+    playerPosRef.current = { x, y, z };
     socket?.send(JSON.stringify({ type: "player_move", x, y, z }));
   }, [socket]);
 
@@ -473,6 +475,28 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
       if (role === "guest") return;
       if (button === 0) {
         if (ny < 0) return; // Prevent placing blocks below ground level
+        
+        // Prevent placing blocks intersecting with the player to avoid trapping them
+        const playerMinX = playerPosRef.current.x - 0.3;
+        const playerMaxX = playerPosRef.current.x + 0.3;
+        const playerMinY = playerPosRef.current.y - 1.5;
+        const playerMaxY = playerPosRef.current.y + 0.2;
+        const playerMinZ = playerPosRef.current.z - 0.3;
+        const playerMaxZ = playerPosRef.current.z + 0.3;
+
+        const blockMinX = nx - 0.5;
+        const blockMaxX = nx + 0.5;
+        const blockMinY = ny - 0.5;
+        const blockMaxY = ny + 0.5;
+        const blockMinZ = nz - 0.5;
+        const blockMaxZ = nz + 0.5;
+
+        const overlaps = playerMinX < blockMaxX && playerMaxX > blockMinX &&
+                         playerMinY < blockMaxY && playerMaxY > blockMinY &&
+                         playerMinZ < blockMaxZ && playerMaxZ > blockMinZ;
+
+        if (overlaps) return;
+
         const activeBlock = PLAYGROUND_BLOCKS[hotbarIndex].id;
         const editKey = `${nx},${ny},${nz}`;
         pendingEditsRef.current.add(editKey);

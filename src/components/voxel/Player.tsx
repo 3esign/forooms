@@ -211,8 +211,8 @@ export function Player({ onLock, onUnlock, onModeChange, onInteract, enabled = t
     if (mode === "fps") {
       // ── FPS Ground Mode ──
       // Calculate direction from inputs
-      frontVector.current.set(0, 0, Number(k.s) - Number(k.w));
-      sideVector.current.set(Number(k.a) - Number(k.d), 0, 0);
+      frontVector.current.set(0, 0, Number(k.s || k.arrowdown) - Number(k.w || k.arrowup));
+      sideVector.current.set(Number(k.a || k.arrowleft) - Number(k.d || k.arrowright), 0, 0);
 
       direction.current
         .subVectors(frontVector.current, sideVector.current)
@@ -264,8 +264,8 @@ export function Player({ onLock, onUnlock, onModeChange, onInteract, enabled = t
 
     } else {
       // ── Fly Mode ──
-      frontVector.current.set(0, 0, Number(k.s) - Number(k.w));
-      sideVector.current.set(Number(k.a) - Number(k.d), 0, 0);
+      frontVector.current.set(0, 0, Number(k.s || k.arrowdown) - Number(k.w || k.arrowup));
+      sideVector.current.set(Number(k.a || k.arrowleft) - Number(k.d || k.arrowright), 0, 0);
 
       direction.current
         .subVectors(frontVector.current, sideVector.current)
