@@ -157,13 +157,26 @@ export default function Home() {
   };
 
   const handleGoogleLogin = useCallback((response: { credential: string }) => {
-    try {
-      socket.send(JSON.stringify({
-        type: "google_login",
-        payload: { credential: response.credential }
-      }));
-    } catch (err) {
-      console.error("[home] Failed to send google_login:", err);
+    console.log("[home] Google callback fired, socket readyState:", socket.readyState);
+    const sendLogin = () => {
+      try {
+        socket.send(JSON.stringify({
+          type: "google_login",
+          payload: { credential: response.credential }
+        }));
+        console.log("[home] google_login sent successfully");
+      } catch (err) {
+        console.error("[home] Failed to send google_login:", err);
+        setLoginError("Connection error. Please try again.");
+      }
+    };
+    // If socket is open, send immediately; otherwise wait for it
+    if (socket.readyState === WebSocket.OPEN) {
+      sendLogin();
+    } else {
+      console.log("[home] Socket not ready, waiting for connection...");
+      const handler = () => { sendLogin(); socket.removeEventListener("open", handler); };
+      socket.addEventListener("open", handler);
     }
   }, [socket]);
 
@@ -179,6 +192,8 @@ export default function Home() {
         google.accounts.id.initialize({
           client_id: clientId,
           callback: handleGoogleLogin,
+          auto_select: false,
+          cancel_on_tap_outside: false,
         });
         google.accounts.id.renderButton(googleBtnRef.current, {
           theme: "filled_black",
@@ -623,6 +638,15 @@ export default function Home() {
               {!(activeAccount || adminPin) && (
                 <div className="border-t border-urban-concrete/20 pt-6 space-y-4">
                   <div className="space-y-4">
+                    {/* Connection status indicator */}
+                    {connectionStatus !== "connected" && (
+                      <div className="p-2 bg-urban-signal/10 border border-urban-signal/20 rounded-lg text-center">
+                        <p className="text-[10px] text-urban-signal font-bold uppercase tracking-wider">
+                          {connectionStatus === "connecting" ? "Connecting to server..." : "Server disconnected. Retrying..."}
+                        </p>
+                      </div>
+                    )}
+
                     {/* Google Sign-In Button */}
                     <div ref={googleBtnRef} className="w-full flex justify-center py-2" />
 
@@ -642,6 +666,18 @@ export default function Home() {
                         </div>
                       )
                     )}
+
+                    {/* Clear any stale session */}
+                    <button
+                      onClick={() => {
+                        logout();
+                        setLoginError("");
+                        window.location.reload();
+                      }}
+                      className="w-full py-2 text-[10px] text-urban-concrete hover:text-white transition-all cursor-pointer uppercase tracking-wider font-bold"
+                    >
+                      Clear Session / Log Off
+                    </button>
                   </div>
                 </div>
               )}
