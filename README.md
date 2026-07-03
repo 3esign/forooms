@@ -45,7 +45,7 @@ Instead of storing comments in separate documents, participants drop comment pin
 | 🗺️ **Centered Satellite MiniMap** | Live 2D minimap with MapLibre & Esri World Imagery tiles that centers and pans dynamically around the player |
 | 🏢 **Procedural Facade Variance** | Deterministic assignment of Concrete Panel, Brick, and Glass Curtain Wall facade types simulates organic architectural diversity |
 | 🌳 **Solid Voxel Base Terrain** | The base grass terrain is fully integrated into the 3D voxel grid at `y = 0`, creating a smooth, Minecraft-style surface flush with roads |
-| 🎛️ **Multi-Layer Design Modes** | Toggle between **Playground** (free citizen sandbox), **Council** (municipal guidelines), and **Simulation** (agent-based traffic pathfinding) |
+| 🎛️ **Multi-Layer Design Modes** | Toggle between **Playground** (free citizen sandbox), **Council** (municipal guidelines), and **Simulation** (procedural traffic animation along OSM vectors) |
 | 🔒 **Role-Based Access** | Admin, Builder, and Guest roles with email-based onboarding and a dedicated admin approval panel |
 | 🛡️ **Self-Trapping Prevention** | Smart block-body overlap checks prevent builders from placing blocks on themselves and getting stuck |
 
@@ -75,7 +75,7 @@ FOROOMS consists of a Next.js frontend and a Node.js WebSocket backend that conn
 | Service | Technology | Role | Hosted On |
 |---|---|---|---|
 | **Frontend** | React, React Three Fiber (Three.js), Tailwind CSS | Renders the 3D world, camera controls, HUD, and 2D MapLibre-GL selection map | Vercel (Free) |
-| **Realtime Server** | Node.js, `ws` (WebSockets), Express | Handles real-time client state sync, user authentication, and admin commands | Render.com (Free) |
+| **Realtime Server** | Node.js, `ws` (WebSockets), native `http` | Handles real-time client state sync, user authentication, and admin commands | Render.com (Free) |
 | **Database** | PostgreSQL | Persists user accounts, room configurations, placed markers, and voxel edits | Supabase (Free) |
 
 ---
@@ -125,7 +125,7 @@ npm run start:server
 npm run dev
 ```
 
-Open **http://localhost:3000**. Log in with your admin PIN (default: `1234` — configurable via `ADMIN_PIN` in your environment).
+Open **http://localhost:3000**. Log in with your admin PIN (default: `123456` — configurable via `ADMIN_PIN` in your environment).
 
 ---
 
@@ -202,3 +202,5 @@ Since hosting environments like Render often lack outbound IPv6 routing, the ser
 ## 📄 License
 
 MIT License — free for academic, community, municipal, and commercial use.
+
+<!-- Cache Invalidation Hash Touch: 2026-07-03T15:05:00Z -->
