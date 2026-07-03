@@ -43,6 +43,7 @@ export function Player({ onLock, onUnlock, onModeChange, onInteract, enabled = t
   });
 
   const lastSentPos = useRef({ x: 0, y: 0, z: 0, t: 0 });
+  const lastInteractTime = useRef(0);
 
   const checkCollision = useCallback((pos: THREE.Vector3): boolean => {
     if (!getBlock) return false;
@@ -157,10 +158,15 @@ export function Player({ onLock, onUnlock, onModeChange, onInteract, enabled = t
 
   useEffect(() => {
     const handlePointerDown = (e: MouseEvent) => {
+      const now = Date.now();
+      if (now - lastInteractTime.current < 250) return; // Prevent double placements/deletions on single click (250ms throttle)
+
       const isLocked = !!document.pointerLockElement;
       
       // If unlocked, we only allow right-click (inspect/place note) to prevent left-click lock interference
       if (!isLocked && e.button !== 2) return;
+
+      lastInteractTime.current = now;
 
       const mouse = isLocked 
         ? new THREE.Vector2(0, 0)
@@ -254,8 +260,8 @@ export function Player({ onLock, onUnlock, onModeChange, onInteract, enabled = t
         velocityY.current = 0;
       }
 
-      // Ground plane collision fallback (sea level y=-0.5 + eye height 1.5 = 1.0)
-      const minEyeY = 1.0;
+      // Ground plane collision fallback (sea level y=0.5 + eye height 1.5 = 2.0)
+      const minEyeY = 2.0;
       if (camera.position.y <= minEyeY) {
         camera.position.y = minEyeY;
         velocityY.current = 0;
