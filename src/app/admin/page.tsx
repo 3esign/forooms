@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import usePartySocket from "partysocket/react";
-import { UserAccount, AccessRequest, ActiveForoom, AuthMessage, AuthResponse } from "../../../party/auth";
+import { UserAccount, AccessRequest, ActiveForoom, AuthMessage, AuthResponse } from "@/types/auth";
 import { Shield, Key, Trash2, CheckCircle2, XCircle, Users, Clipboard, User } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useAuth } from "../../contexts/AuthContext";

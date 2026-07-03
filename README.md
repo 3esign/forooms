@@ -74,7 +74,7 @@ FOROOMS consists of a Next.js frontend and a Node.js WebSocket backend that conn
 
 | Service | Technology | Role | Hosted On |
 |---|---|---|---|
-| **Frontend** | React, React Three Fiber (Three.js), Tailwind CSS | Renders the 3D world, camera controls, HUD, and 2D Leaflet selection map | Vercel (Free) |
+| **Frontend** | React, React Three Fiber (Three.js), Tailwind CSS | Renders the 3D world, camera controls, HUD, and 2D MapLibre-GL selection map | Vercel (Free) |
 | **Realtime Server** | Node.js, `ws` (WebSockets), Express | Handles real-time client state sync, user authentication, and admin commands | Render.com (Free) |
 | **Database** | PostgreSQL | Persists user accounts, room configurations, placed markers, and voxel edits | Supabase (Free) |
 
@@ -90,7 +90,7 @@ forooms/
 │   │   ├── admin/page.tsx      # Admin dashboard
 │   │   └── api/osm/route.ts    # Server-side OSM proxy
 │   ├── components/
-│   │   ├── Map.tsx             # Leaflet map for selection & room creation
+│   │   ├── Map.tsx             # MapLibre-GL map for selection & room creation
 │   │   └── voxel/              # 3D engine (13 components)
 │   │       ├── VoxelScene.tsx  # Main scene orchestrator
 │   │       ├── Player.tsx      # FPS controls, physics, & collision

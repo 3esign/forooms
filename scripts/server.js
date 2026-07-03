@@ -188,6 +188,36 @@ function safeCompare(a, b) {
   return crypto.timingSafeEqual(aBuf, bBuf);
 }
 
+// Simple in-memory rate limiting map for login / admin PIN verification
+const failedAttempts = new Map(); // IP -> { count: number, lockUntil: number }
+
+function isRateLimited(ip) {
+  const record = failedAttempts.get(ip);
+  if (!record) return false;
+  if (record.lockUntil > Date.now()) {
+    return true;
+  }
+  // Lock expired, clean up
+  if (record.lockUntil > 0) {
+    failedAttempts.delete(ip);
+  }
+  return false;
+}
+
+function registerFailedAttempt(ip) {
+  const record = failedAttempts.get(ip) || { count: 0, lockUntil: 0 };
+  record.count += 1;
+  if (record.count >= 5) {
+    record.lockUntil = Date.now() + 15 * 60 * 1000; // 15 minute lockout
+    console.warn(`[security] IP ${ip} has been rate-limited/locked out due to excessive failed attempts.`);
+  }
+  failedAttempts.set(ip, record);
+}
+
+function resetFailedAttempts(ip) {
+  failedAttempts.delete(ip);
+}
+
 // HTTP server to handle verification & static health checks
 const server = http.createServer((req, res) => {
   const parsedUrl = url.parse(req.url, true);
@@ -204,20 +234,30 @@ const server = http.createServer((req, res) => {
   }
 
   if (parsedUrl.pathname === "/verify") {
+    const ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
+    if (isRateLimited(ip)) {
+      res.writeHead(429, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Too many login attempts. Locked out for 15 minutes." }));
+      return;
+    }
+
     const token = parsedUrl.query.token;
     if (safeCompare(token, ADMIN_PIN)) {
+      resetFailedAttempts(ip);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ valid: true, email: "admin", role: "admin" }));
       return;
     }
 
     if (token && tokens.has(token)) {
+      resetFailedAttempts(ip);
       const session = tokens.get(token);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ valid: true, ...session }));
       return;
     }
 
+    registerFailedAttempt(ip);
     res.writeHead(401, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ valid: false }));
     return;
@@ -242,6 +282,7 @@ const server = http.createServer((req, res) => {
 const wss = new WebSocketServer({ noServer: true });
 
 wss.on("connection", (ws, req) => {
+  ws.ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
   const parsedUrl = url.parse(req.url, true);
   const pathname = parsedUrl.pathname;
   const token = parsedUrl.query.token;
@@ -291,8 +332,15 @@ wss.on("connection", (ws, req) => {
 
         if (msg.type === "verify_login") {
           const { email: loginEmail, passwordHash: clientPassword } = msg.payload;
+          const ip = ws.ip;
 
-          if (clientPassword === ADMIN_PIN) {
+          if (isRateLimited(ip)) {
+            ws.send(JSON.stringify({ type: "login_failed", payload: "Too many login attempts. Locked out for 15 minutes." }));
+            return;
+          }
+
+          if (safeCompare(clientPassword, ADMIN_PIN)) {
+            resetFailedAttempts(ip);
             ws.send(JSON.stringify({
               type: "login_success",
               payload: {
@@ -321,6 +369,7 @@ wss.on("connection", (ws, req) => {
           }
 
           if (loginSuccess && account) {
+            resetFailedAttempts(ip);
             const sessionToken = crypto.randomUUID();
             tokens.set(sessionToken, {
               email: account.email,
@@ -333,6 +382,7 @@ wss.on("connection", (ws, req) => {
             const safeAccount = { ...account, passwordHash: undefined, passwordSalt: undefined };
             ws.send(JSON.stringify({ type: "login_success", payload: { account: safeAccount, token: sessionToken } }));
           } else {
+            registerFailedAttempt(ip);
             ws.send(JSON.stringify({ type: "login_failed", payload: "Invalid email or password" }));
           }
         }
@@ -421,10 +471,18 @@ wss.on("connection", (ws, req) => {
           msg.type === "delete_request" ||
           msg.type === "toggle_create_access"
         ) {
+          const ip = ws.ip;
+          if (isRateLimited(ip)) {
+            ws.send(JSON.stringify({ type: "error", payload: "Rate limited" }));
+            return;
+          }
+
           if (!safeCompare(msg.payload.adminPin, ADMIN_PIN)) {
+            registerFailedAttempt(ip);
             ws.send(JSON.stringify({ type: "error", payload: "Unauthorized" }));
             return;
           }
+          resetFailedAttempts(ip);
 
           adminConnections.add(ws);
 

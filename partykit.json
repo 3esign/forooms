@@ -1,8 +1,0 @@
-{
-  "name": "forooms-party",
-  "main": "party/server.ts",
-  "compatibilityDate": "2024-04-05",
-  "parties": {
-    "auth": "party/auth.ts"
-  }
-}

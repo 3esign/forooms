@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { UserAccount } from "../../party/auth";
+import { UserAccount } from "@/types/auth";
 
 interface AuthContextType {
   activeAccount: UserAccount | null;

@@ -6,17 +6,27 @@ export interface LoadingOverlayProps {
   error: string | null;
   onFadeComplete: () => void;
   onExit: () => void;
+  isConnectingSocket?: boolean;
 }
 
-export function LoadingOverlay({ status, stats, error, onFadeComplete, onExit }: LoadingOverlayProps) {
+export function LoadingOverlay({ status, stats, error, onFadeComplete, onExit, isConnectingSocket = false }: LoadingOverlayProps) {
   const [logs, setLogs] = useState<string[]>([]);
   const [shouldFadeOut, setShouldFadeOut] = useState(false);
 
   useEffect(() => {
     const timestamp = () => new Date().toISOString().split("T")[1].slice(0, 8);
     
+    if (isConnectingSocket) {
+      setLogs([
+        `[${timestamp()}] [SYSTEM] Resolving connection to realtime server...`,
+        `[${timestamp()}] [SYSTEM] (Render free-tier servers sleep when idle and may take 30-50 seconds to wake up)`
+      ]);
+      return;
+    }
+    
     if (status === "fetching") {
       setLogs([
+        `[${timestamp()}] [SYSTEM] Connected to server successfully.`,
         `[${timestamp()}] [DATA] Fetching building footprints & major roads...`
       ]);
     } else if (status === "projecting") {
@@ -50,7 +60,7 @@ export function LoadingOverlay({ status, stats, error, onFadeComplete, onExit }:
         `[${timestamp()}] [ERROR] ${error}`,
       ]);
     }
-  }, [status, stats, error, onFadeComplete]);
+  }, [status, stats, error, onFadeComplete, isConnectingSocket]);
 
   const progressMap = {
     idle: 0,

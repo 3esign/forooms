@@ -4,15 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:party": "partykit dev -p 1999",
     "build": "next build",
     "start": "next start",
     "start:server": "node scripts/server.js",
     "lint": "eslint",
     "test": "node scripts/test-ws.js",
-    "deploy:party": "partykit deploy",
-    "deploy:vercel": "vercel --prod",
-    "publish": "git add . && git commit -m \"update: code changes\" && git push origin master:main"
+    "deploy:vercel": "vercel --prod"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",

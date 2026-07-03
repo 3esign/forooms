@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { Layers, Box, Cpu, ChevronRight, Lock, Key, ClipboardList, Send, MapPin, Eye } from "lucide-react";
 import { normalizeBbox } from "../lib/osm";
 import usePartySocket from "partysocket/react";
-import { AuthResponse, UserAccount, ActiveForoom, AuthMessage } from "../../party/auth";
+import { AuthResponse, UserAccount, ActiveForoom, AuthMessage } from "@/types/auth";
 
 // Dynamically import Map so it only renders on client
 const Map = dynamic(() => import("../components/Map"), { ssr: false });
@@ -47,6 +47,7 @@ export default function Home() {
   // Forooms data
   const [forooms, setForooms] = useState<ActiveForoom[]>([]);
   const [newForoomName, setNewForoomName] = useState("");
+  const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
 
   // Guest mode flag passed to canvas
   const [isGuest, setIsGuest] = useState(false);
@@ -64,6 +65,17 @@ export default function Home() {
     host: process.env.NEXT_PUBLIC_PARTYKIT_HOST || "localhost:1999",
     room: "admin-auth",
     party: "auth",
+    onOpen: () => {
+      setConnectionStatus("connected");
+      console.log("[home] Socket connected");
+    },
+    onClose: () => {
+      setConnectionStatus("disconnected");
+      console.log("[home] Socket disconnected");
+    },
+    onError: () => {
+      setConnectionStatus("disconnected");
+    },
     onMessage: (e) => {
       console.log("[home] Socket message received:", e.data);
       try {
@@ -333,6 +345,17 @@ export default function Home() {
               <ClipboardList className="w-4 h-4" />
               Active Forooms ({forooms.length})
             </h3>
+
+            {connectionStatus === "connecting" && (
+              <div className="p-3 bg-urban-blueprint/5 border border-urban-blueprint/20 rounded-xl flex items-start gap-3 animate-pulse">
+                <div className="w-2.5 h-2.5 rounded-full bg-urban-blueprint animate-ping shrink-0 mt-1" />
+                <div className="text-xxs text-urban-concrete leading-normal">
+                  <strong className="text-white">Connecting to Realtime Engine...</strong>
+                  <p className="mt-0.5">Render free-tier servers sleep when idle. Cold boot may take 30–50 seconds. Thanks for your patience!</p>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
               {forooms.map((f, i) => (
                 <div 

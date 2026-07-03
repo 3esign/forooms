@@ -4,7 +4,7 @@ import React, { useRef, useEffect, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { normalizeBbox } from "@/lib/osm";
-import { ActiveForoom } from "../../party/auth";
+import { ActiveForoom } from "@/types/auth";
 
 interface MapProps {
   onBoundingBoxSelect: (bbox: [number, number, number, number] | null) => void;

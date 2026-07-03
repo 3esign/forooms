@@ -78,6 +78,7 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
   const [overlayVisible, setOverlayVisible] = useState(true);
   const [isLocked, setIsLocked] = useState(false);
   const [movementMode, setMovementMode] = useState<MovementMode>("fps");
+  const [isSocketConnected, setIsSocketConnected] = useState(false);
   const [textures, setTextures] = useState<Record<number, THREE.Texture>>({});
   const controlsEnabled = !overlayVisible && status === "completed";
 
@@ -134,6 +135,14 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
     host: process.env.NEXT_PUBLIC_PARTYKIT_HOST || "localhost:1999",
     room: `foroom-${bbox.join("-")}`,
     query: { ...(token ? { token } : {}) },
+    onOpen: () => {
+      setIsSocketConnected(true);
+      console.log("[room] WebSocket connected");
+    },
+    onClose: () => {
+      setIsSocketConnected(false);
+      console.log("[room] WebSocket disconnected");
+    },
     onMessage: (e) => {
       try {
         const msg = JSON.parse(e.data);
@@ -574,6 +583,7 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
           error={error}
           onFadeComplete={() => setOverlayVisible(false)}
           onExit={onExit}
+          isConnectingSocket={!isSocketConnected}
         />
       )}
 
