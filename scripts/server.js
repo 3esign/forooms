@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { WebSocketServer } = require("ws");
+const { Client } = require("pg");
 
 // Ensure data folder exists
 const DATA_DIR = path.join(__dirname, "../data");
@@ -21,20 +22,85 @@ let db = {
   roomInfoBlocks: {},
   roomAppearances: {}
 };
-if (fs.existsSync(DB_PATH)) {
-  try {
-    db = JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
-  } catch (e) {
-    console.error("Failed to load db.json, starting fresh", e);
+
+let pgClient = null;
+const DATABASE_URL = process.env.DATABASE_URL;
+
+async function initDb() {
+  if (DATABASE_URL) {
+    console.log("DATABASE_URL is set. Connecting to PostgreSQL database...");
+    try {
+      pgClient = new Client({
+        connectionString: DATABASE_URL,
+        ssl: {
+          rejectUnauthorized: false
+        }
+      });
+      await pgClient.connect();
+      console.log("Successfully connected to PostgreSQL database.");
+
+      // Create table if it doesn't exist
+      await pgClient.query(`
+        CREATE TABLE IF NOT EXISTS forooms_store (
+          key VARCHAR(50) PRIMARY KEY,
+          data JSONB NOT NULL
+        )
+      `);
+
+      // Try to load the data
+      const res = await pgClient.query("SELECT data FROM forooms_store WHERE key = 'current'");
+      if (res.rows.length > 0) {
+        db = res.rows[0].data;
+        console.log("Database loaded successfully from PostgreSQL.");
+      } else {
+        // Initialize row
+        await pgClient.query("INSERT INTO forooms_store (key, data) VALUES ('current', $1)", [JSON.stringify(db)]);
+        console.log("Initialized fresh database in PostgreSQL store.");
+      }
+    } catch (err) {
+      console.error("Failed to connect or initialize PostgreSQL database, falling back to local file storage:", err);
+      pgClient = null;
+      loadLocalDb();
+    }
+  } else {
+    console.log("No DATABASE_URL set. Using local file storage.");
+    loadLocalDb();
   }
 }
 
-function saveDb() {
-  try {
-    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2), "utf8");
-  } catch (e) {
-    console.error("Failed to save db.json", e);
+function loadLocalDb() {
+  if (fs.existsSync(DB_PATH)) {
+    try {
+      db = JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
+      console.log("Database loaded successfully from local file.");
+    } catch (e) {
+      console.error("Failed to load db.json, starting fresh", e);
+    }
+  } else {
+    console.log("Starting with a fresh local database.");
   }
+}
+
+let saveTimeout = null;
+function saveDb() {
+  if (!pgClient) {
+    try {
+      fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2), "utf8");
+    } catch (e) {
+      console.error("Failed to save db.json", e);
+    }
+    return;
+  }
+
+  if (saveTimeout) clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(async () => {
+    try {
+      await pgClient.query("UPDATE forooms_store SET data = $1 WHERE key = 'current'", [JSON.stringify(db)]);
+      console.log("Database saved successfully to PostgreSQL.");
+    } catch (err) {
+      console.error("Failed to save database to PostgreSQL:", err);
+    }
+  }, 2000);
 }
 
 // Session tokens cache
@@ -608,7 +674,10 @@ server.on("upgrade", (req, socket, head) => {
   }
 });
 
-// Start HTTP server
-server.listen(PORT, () => {
-  console.log(`🎈 FOROOMS Realtime Standalone Server is running on port ${PORT}`);
-});
+// Start HTTP server after database initialization
+(async () => {
+  await initDb();
+  server.listen(PORT, () => {
+    console.log(`🎈 FOROOMS Realtime Standalone Server is running on port ${PORT}`);
+  });
+})();
