@@ -56,6 +56,7 @@ export default function Home() {
   // Google Sign-In
   const googleBtnRef = useRef<HTMLDivElement>(null);
   const googleInitializedRef = useRef(false);
+  const [googleUiEnabled, setGoogleUiEnabled] = useState(true);
 
   useEffect(() => {
     // Check if we logged in via the admin dashboard
@@ -75,6 +76,12 @@ export default function Home() {
       sessionStorage.removeItem("admin_auto_login");
     } catch {}
   }, [loginAsAdmin]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // After an explicit log off, require an explicit click before re-enabling Google sign-in UI.
+    setGoogleUiEnabled(localStorage.getItem("google_logged_out") !== "true");
+  }, []);
 
   useEffect(() => {
     if (activeAccount) {
@@ -200,13 +207,6 @@ export default function Home() {
     }
   }, [socket]);
 
-  const handleGoogleBtnMouseEnter = useCallback(() => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("google_logged_out");
-      console.log("[home] Cleared google_logged_out flag on user interaction");
-    }
-  }, []);
-
   const handleLogout = useCallback(() => {
     setSidebarTab("home");
     logout().then(() => {
@@ -254,6 +254,7 @@ export default function Home() {
   // Render Google Sign-In button when container becomes available (and user is logged out)
   useEffect(() => {
     if (activeAccount || adminPin) return;
+    if (!googleUiEnabled) return;
     const interval = setInterval(() => {
       const google = (window as unknown as Record<string, unknown>).google as { accounts?: { id?: { renderButton: (el: HTMLElement, opts: Record<string, unknown>) => void } } } | undefined;
       if (google?.accounts?.id && googleBtnRef.current) {
@@ -268,7 +269,7 @@ export default function Home() {
       }
     }, 300);
     return () => clearInterval(interval);
-  }, [activeAccount, adminPin]);
+  }, [activeAccount, adminPin, googleUiEnabled]);
 
   const handleRequestAccess = (e: React.FormEvent) => {
     e.preventDefault();
@@ -718,13 +719,29 @@ export default function Home() {
                       </div>
                     )}
 
-                    {/* Google Sign-In Button */}
-                    <div 
-                      ref={googleBtnRef} 
-                      className="w-full flex justify-center py-2" 
-                      onMouseEnter={handleGoogleBtnMouseEnter}
-                      onTouchStart={handleGoogleBtnMouseEnter}
-                    />
+                    {/* Google Sign-In Button (explicit re-enable after log off) */}
+                    {googleUiEnabled ? (
+                      <div
+                        ref={googleBtnRef}
+                        className="w-full flex justify-center py-2"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          localStorage.removeItem("google_logged_out");
+                          setGoogleUiEnabled(true);
+                          try {
+                            const google = (window as unknown as any).google;
+                            google?.accounts?.id?.disableAutoSelect?.();
+                            google?.accounts?.id?.cancel?.();
+                          } catch {}
+                        }}
+                        className="w-full py-3 bg-urban-blueprint hover:bg-blue-500 text-white rounded-xl font-bold tracking-wide transition-all flex items-center justify-center gap-2 cursor-pointer text-sm shadow-[0_0_20px_rgba(47,129,247,0.3)]"
+                      >
+                        Enable Google Sign-In
+                      </button>
+                    )}
 
                     {loginError === "pending_approval" ? (
                       <div className="p-4 bg-urban-signal/10 border border-urban-signal/25 rounded-xl text-center">

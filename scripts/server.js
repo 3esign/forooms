@@ -193,21 +193,15 @@ const PORT = process.env.PORT || 1999;
 
 let ADMIN_PIN = process.env.ADMIN_PIN;
 if (!ADMIN_PIN) {
-  if (process.env.NODE_ENV === "production" || process.env.RENDER) {
-    throw new Error("ADMIN_PIN environment variable is REQUIRED in production/Render!");
-  }
-  ADMIN_PIN = "123456"; // Secure local development default
+  ADMIN_PIN = "123456";
+  console.warn("[security] WARNING: ADMIN_PIN is not set. Defaulting to 123456.");
 } else {
   const cleanPin = ADMIN_PIN.trim();
   const isNumericOnly = /^\d+$/.test(cleanPin);
   const isWeakPattern = /^(0123|1234|2345|3456|4567|5678|6789|1111|2222|3333|4444|5555|6666|7777|8888|9999|0000|123456|1234)$/.test(cleanPin);
   
   if (cleanPin.length < 6 || (isNumericOnly && isWeakPattern)) {
-    if (process.env.NODE_ENV === "production" || process.env.RENDER) {
-      throw new Error("CRITICAL: ADMIN_PIN is too weak! Must be at least 6 characters and not a sequential or repeating pattern (e.g. 1234, 123456, 111111).");
-    } else {
-      console.warn("[security] WARNING: ADMIN_PIN is weak! Consider setting a stronger non-sequential PIN.");
-    }
+    console.warn("[security] WARNING: ADMIN_PIN is weak! Consider setting a stronger non-sequential PIN.");
   }
 }
 
