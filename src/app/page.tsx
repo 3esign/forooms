@@ -55,6 +55,7 @@ export default function Home() {
 
   // Google Sign-In
   const googleBtnRef = useRef<HTMLDivElement>(null);
+  const googleInitializedRef = useRef(false);
 
   useEffect(() => {
     // Check if we logged in via the admin dashboard
@@ -180,13 +181,11 @@ export default function Home() {
     }
   }, [socket]);
 
-  // Initialize Google Sign-In button
+  // Initialize Google Sign-In library once on script load
   useEffect(() => {
-    if (activeAccount || adminPin) return;
     const interval = setInterval(() => {
       const google = (window as unknown as Record<string, unknown>).google as { accounts?: { id?: { initialize: (opts: Record<string, unknown>) => void; renderButton: (el: HTMLElement, opts: Record<string, unknown>) => void } } } | undefined;
-      if (google?.accounts?.id && googleBtnRef.current) {
-        clearInterval(interval);
+      if (google?.accounts?.id && !googleInitializedRef.current) {
         const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
         if (!clientId) return;
         google.accounts.id.initialize({
@@ -195,6 +194,20 @@ export default function Home() {
           auto_select: false,
           cancel_on_tap_outside: false,
         });
+        googleInitializedRef.current = true;
+        clearInterval(interval);
+      }
+    }, 300);
+    return () => clearInterval(interval);
+  }, [handleGoogleLogin]);
+
+  // Render Google Sign-In button when container becomes available (and user is logged out)
+  useEffect(() => {
+    if (activeAccount || adminPin) return;
+    const interval = setInterval(() => {
+      const google = (window as unknown as Record<string, unknown>).google as { accounts?: { id?: { renderButton: (el: HTMLElement, opts: Record<string, unknown>) => void } } } | undefined;
+      if (google?.accounts?.id && googleBtnRef.current) {
+        clearInterval(interval);
         google.accounts.id.renderButton(googleBtnRef.current, {
           theme: "filled_black",
           size: "large",
@@ -205,7 +218,7 @@ export default function Home() {
       }
     }, 300);
     return () => clearInterval(interval);
-  }, [activeAccount, adminPin, handleGoogleLogin]);
+  }, [activeAccount, adminPin]);
 
   const handleRequestAccess = (e: React.FormEvent) => {
     e.preventDefault();
@@ -680,6 +693,7 @@ export default function Home() {
                       onClick={() => {
                         logout();
                         setLoginError("");
+                        window.location.reload();
                       }}
                       className="w-full py-2 text-[10px] text-urban-concrete hover:text-white transition-all cursor-pointer uppercase tracking-wider font-bold"
                     >
@@ -774,6 +788,7 @@ export default function Home() {
                 onClick={() => {
                   logout();
                   setSidebarTab("home");
+                  window.location.reload();
                 }}
                 className="w-full py-2.5 bg-urban-brick/10 hover:bg-urban-brick/20 border border-urban-brick/20 rounded-xl text-xs font-bold tracking-wide text-urban-brick transition-all cursor-pointer"
               >
@@ -810,6 +825,7 @@ export default function Home() {
                   onClick={() => {
                     logout();
                     setSidebarTab("home");
+                    window.location.reload();
                   }}
                   className="py-3 px-4 bg-urban-brick/10 hover:bg-urban-brick/20 border border-urban-brick/20 rounded-xl text-xs font-bold tracking-wide text-urban-brick transition-all cursor-pointer"
                 >
