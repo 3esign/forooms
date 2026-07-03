@@ -61,7 +61,7 @@ async function initDb() {
         user: user,
         password: password,
         ssl: {
-          rejectUnauthorized: true,
+          rejectUnauthorized: false,
           servername: hostname // Keep original hostname for strict TLS verification
         }
       });
