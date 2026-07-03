@@ -79,6 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem("activeAccount");
       localStorage.removeItem("adminPin");
       localStorage.removeItem("admin_auto_login");
+      localStorage.setItem("google_logged_out", "true");
       try {
         const google = (window as any).google;
         if (google?.accounts?.id) {

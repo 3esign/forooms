@@ -159,6 +159,10 @@ export default function Home() {
 
   const handleGoogleLogin = useCallback((response: { credential: string }) => {
     console.log("[home] Google callback fired, socket readyState:", socket.readyState);
+    if (typeof window !== "undefined" && localStorage.getItem("google_logged_out") === "true") {
+      console.log("[home] Ignoring auto-login after explicit log off");
+      return;
+    }
     const sendLogin = () => {
       try {
         socket.send(JSON.stringify({
@@ -180,6 +184,21 @@ export default function Home() {
       socket.addEventListener("open", handler);
     }
   }, [socket]);
+
+  const handleGoogleBtnMouseEnter = useCallback(() => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("google_logged_out");
+      console.log("[home] Cleared google_logged_out flag on user interaction");
+    }
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    logout();
+    setSidebarTab("home");
+    setTimeout(() => {
+      window.location.reload();
+    }, 500);
+  }, [logout]);
 
   // Initialize Google Sign-In library once on script load
   useEffect(() => {
@@ -669,7 +688,12 @@ export default function Home() {
                     )}
 
                     {/* Google Sign-In Button */}
-                    <div ref={googleBtnRef} className="w-full flex justify-center py-2" />
+                    <div 
+                      ref={googleBtnRef} 
+                      className="w-full flex justify-center py-2" 
+                      onMouseEnter={handleGoogleBtnMouseEnter}
+                      onTouchStart={handleGoogleBtnMouseEnter}
+                    />
 
                     {loginError === "pending_approval" ? (
                       <div className="p-4 bg-urban-signal/10 border border-urban-signal/25 rounded-xl text-center">
@@ -691,9 +715,8 @@ export default function Home() {
                     {/* Clear any stale session */}
                     <button
                       onClick={() => {
-                        logout();
+                        handleLogout();
                         setLoginError("");
-                        window.location.reload();
                       }}
                       className="w-full py-2 text-[10px] text-urban-concrete hover:text-white transition-all cursor-pointer uppercase tracking-wider font-bold"
                     >
@@ -785,11 +808,7 @@ export default function Home() {
               )}
 
               <button 
-                onClick={() => {
-                  logout();
-                  setSidebarTab("home");
-                  window.location.reload();
-                }}
+                onClick={handleLogout}
                 className="w-full py-2.5 bg-urban-brick/10 hover:bg-urban-brick/20 border border-urban-brick/20 rounded-xl text-xs font-bold tracking-wide text-urban-brick transition-all cursor-pointer"
               >
                 Log Off
@@ -822,11 +841,7 @@ export default function Home() {
                   Enter Admin Portal
                 </button>
                 <button 
-                  onClick={() => {
-                    logout();
-                    setSidebarTab("home");
-                    window.location.reload();
-                  }}
+                  onClick={handleLogout}
                   className="py-3 px-4 bg-urban-brick/10 hover:bg-urban-brick/20 border border-urban-brick/20 rounded-xl text-xs font-bold tracking-wide text-urban-brick transition-all cursor-pointer"
                 >
                   Log Off
