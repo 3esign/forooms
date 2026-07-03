@@ -21,6 +21,19 @@ export default function Map({ onBoundingBoxSelect, forooms, allowDrawing, center
   const [lat] = useState(43.1367);
   const [zoom] = useState(14);
 
+  // Use refs to prevent stale closure issues inside Maplibre event listeners
+  const allowDrawingRef = useRef(allowDrawing);
+  const onBoundingBoxSelectRef = useRef(onBoundingBoxSelect);
+
+  // Keep refs in sync with props
+  useEffect(() => {
+    allowDrawingRef.current = allowDrawing;
+  }, [allowDrawing]);
+
+  useEffect(() => {
+    onBoundingBoxSelectRef.current = onBoundingBoxSelect;
+  }, [onBoundingBoxSelect]);
+
   // Pan to center if changed externally
   useEffect(() => {
     if (map.current && center) {
@@ -191,7 +204,7 @@ export default function Map({ onBoundingBoxSelect, forooms, allowDrawing, center
       if (feature && feature.properties) {
         try {
           const bbox = JSON.parse(feature.properties.bbox) as [number, number, number, number];
-          onBoundingBoxSelect(bbox);
+          onBoundingBoxSelectRef.current(bbox);
         } catch (err) {
           console.error("Failed to parse bbox", err);
         }
@@ -207,7 +220,7 @@ export default function Map({ onBoundingBoxSelect, forooms, allowDrawing, center
     });
 
     map.current.on("mousedown", (e) => {
-      if (!allowDrawing) return; // Disallow guests/unauthorized users
+      if (!allowDrawingRef.current) return; // Disallow guests/unauthorized users
       if (!e.originalEvent.shiftKey) return;
       
       // Start drawing a new box
@@ -216,7 +229,7 @@ export default function Map({ onBoundingBoxSelect, forooms, allowDrawing, center
       startPoint = e.lngLat;
       currentBox = null;
       updateBox(null);
-      onBoundingBoxSelect(null);
+      onBoundingBoxSelectRef.current(null);
     });
 
     map.current.on("mousemove", (e) => {
@@ -241,11 +254,11 @@ export default function Map({ onBoundingBoxSelect, forooms, allowDrawing, center
           alert("Selection too large! Please hold Shift and drag a smaller area (max 2x2 km).");
           updateBox(null);
           currentBox = null;
-          onBoundingBoxSelect(null);
+          onBoundingBoxSelectRef.current(null);
           return;
         }
 
-        onBoundingBoxSelect(
+        onBoundingBoxSelectRef.current(
           normalizeBbox([
             currentBox.getWest(),
             currentBox.getSouth(),
@@ -256,7 +269,7 @@ export default function Map({ onBoundingBoxSelect, forooms, allowDrawing, center
       }
     });
 
-  }, [lng, lat, zoom, onBoundingBoxSelect, allowDrawing, forooms]);
+  }, [lng, lat, zoom]);
 
   return <div ref={mapContainer} className="w-full h-full" />;
 }
