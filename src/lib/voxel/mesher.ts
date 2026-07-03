@@ -179,6 +179,7 @@ export function greedyMeshGrid(grid: CityGrid): Record<number, Cuboid[]> {
       materials.add(blockId);
     }
   }
+  materials.add(BlockId.Grass);
 
   const width = maxX - minX + 1;
   const depth = maxZ - minZ + 1;

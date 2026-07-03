@@ -622,8 +622,8 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
           shadow-camera-bottom={-200}
         />
         
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.5, 0]} receiveShadow raycast={() => null}>
-          <planeGeometry args={[4000, 4000]} />
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.6, 0]} receiveShadow raycast={() => null}>
+          <planeGeometry args={[20000, 20000]} />
           {repeatingWaterTexture && (
             <meshStandardMaterial 
               map={repeatingWaterTexture} 
@@ -639,7 +639,7 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
             rotation={[-Math.PI / 2, 0, 0]} 
             position={[
               (islandBounds.minX + islandBounds.maxX) / 2, 
-              -0.49, 
+              -0.55, 
               (islandBounds.minZ + islandBounds.maxZ) / 2
             ]} 
             receiveShadow
@@ -653,6 +653,9 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
               color="#5C8542"
               roughness={0.9}
               metalness={0.0}
+              polygonOffset
+              polygonOffsetFactor={-1}
+              polygonOffsetUnits={-1}
             />
           </mesh>
         )}
