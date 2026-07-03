@@ -74,6 +74,7 @@ interface VoxelSceneProps {
 }
 
 export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
+  const [currentRole, setCurrentRole] = useState(role);
   const [status, setStatus] = useState<"idle" | "fetching" | "projecting" | "rasterizing" | "completed" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const [overlayVisible, setOverlayVisible] = useState(true);
@@ -146,6 +147,9 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
       try {
         const msg = JSON.parse(e.data);
         if (msg.type === "init") {
+          if (msg.role) {
+            setCurrentRole(msg.role);
+          }
           const loadedEdits: VoxelBlock[] = [];
           msg.edits.forEach((edit: any) => {
             loadedEdits.push({ x: edit.x, y: edit.y, z: edit.z, blockId: edit.blockId });
@@ -177,6 +181,8 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
           }
           if (msg.players) setPlayers(msg.players);
           if (msg.logs) setLogs(msg.logs);
+        } else if (msg.type === "role_updated") {
+          if (msg.newRole) setCurrentRole(msg.newRole);
         } else if (msg.type === "appearance_update") {
           if (msg.appearance) setAppearance(msg.appearance);
         } else if (msg.type === "info_update") {
@@ -460,7 +466,7 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
           setIsEditingInfo(false);
           setIsInfoModalOpen(true);
           document.exitPointerLock();
-        } else if (role !== "guest") {
+        } else if (currentRole !== "guest") {
           setInfoText("");
           setIsEditingInfo(true);
           setIsInfoModalOpen(true);
@@ -505,7 +511,7 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
           setIsEditingInfo(false);
           setIsInfoModalOpen(true);
           document.exitPointerLock();
-        } else if (role !== "guest") {
+        } else if (currentRole !== "guest") {
           setInfoText("");
           setIsEditingInfo(true);
           setIsInfoModalOpen(true);
@@ -513,7 +519,7 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
         }
       }
     } else if (activeLayer === "playground") {
-      if (role === "guest") return;
+      if (currentRole === "guest") return;
       if (button === 0) {
         if (ny < 0) return; // Prevent placing blocks below ground level
         
@@ -559,7 +565,7 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
         }));
       }
     }
-  }, [infoBlocks, role, activeLayer, socket, applyVoxelEdit, hotbarIndex]);
+  }, [infoBlocks, currentRole, activeLayer, socket, applyVoxelEdit, hotbarIndex]);
 
   const handleSaveInfo = (newText: string) => {
     if (!interactTarget) return;
@@ -730,7 +736,7 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
           <LayerSwitcher 
             activeLayer={activeLayer}
             onChange={setActiveLayer}
-            role={role as "admin" | "builder" | "guest"}
+            role={currentRole as "admin" | "builder" | "guest"}
           />
         </div>
       )}
@@ -744,7 +750,7 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
         setIsEditingInfo={setIsEditingInfo}
         infoText={infoText}
         onSaveInfo={handleSaveInfo}
-        role={role}
+        role={currentRole}
       />
 
       {!isLocked && controlsEnabled && !isInfoModalOpen && (
@@ -823,7 +829,7 @@ export function VoxelScene({ bbox, onExit, role, token }: VoxelSceneProps) {
             <Map className="w-4 h-4" />
             {isMiniMapExpanded ? "Shrink Map" : "Expand Map"}
           </button>
-          {role === "admin" && (
+          {currentRole === "admin" && (
             <>
               <button 
                 onClick={() => setIsAppearanceModalOpen(true)}

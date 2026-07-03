@@ -59,7 +59,7 @@ export function AdminModal({
                   onChange={(e) => onChangeRole(p.id, e.target.value)}
                   className="bg-[#111] border border-[#333] text-white text-xs rounded-lg px-2 py-1.5 focus:border-urban-blueprint outline-none cursor-pointer"
                 >
-                  <option value="guest">Guest (View Only)</option>
+                  <option value="guest">Participant (View Only)</option>
                   <option value="builder">Builder (Can Edit)</option>
                   <option value="admin">Admin (Full Control)</option>
                 </select>

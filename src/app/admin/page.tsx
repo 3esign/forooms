@@ -75,8 +75,7 @@ export default function AdminDashboard() {
         } else if (data.type === "all_forooms") {
           setForooms(data.payload);
         } else if (data.type === "request_approved_success") {
-          const payload = data.payload as { email: string; password: string };
-          alert(`SUCCESS: Request Approved!\n\nTemporary password for ${payload.email} is:\n${payload.password}\n\nPlease copy this password to share with the user.`);
+          // Request approved successfully, table state will auto-sync via presence
         } else if (data.type === "error") {
           if (data.payload === "Unauthorized") {
             setIsAuthenticated(false);
@@ -134,13 +133,6 @@ export default function AdminDashboard() {
     socket.send(JSON.stringify({
       type: "toggle_create_access",
       payload: { accountId, canCreateForoom: canCreate, adminPin: pin }
-    } as AuthMessage));
-  };
-
-  const handleToggleAdminRole = (accountId: string, isAdmin: boolean) => {
-    socket.send(JSON.stringify({
-      type: "toggle_admin_role",
-      payload: { accountId, isAdmin, adminPin: pin }
     } as AuthMessage));
   };
 
@@ -395,7 +387,7 @@ export default function AdminDashboard() {
                   <thead className="bg-black/20">
                     <tr>
                       <th className="p-4 font-semibold text-urban-concrete uppercase tracking-wider">Account</th>
-                      <th className="p-4 font-semibold text-urban-concrete uppercase tracking-wider">Access / Admin</th>
+                      <th className="p-4 font-semibold text-urban-concrete uppercase tracking-wider">Create Access</th>
                       <th className="p-4 font-semibold text-urban-concrete uppercase tracking-wider text-right">Actions</th>
                     </tr>
                   </thead>
@@ -415,7 +407,7 @@ export default function AdminDashboard() {
                           <div>{acc.email}</div>
                           {acc.nick && <div className="text-[10px] text-urban-park font-bold uppercase tracking-wider mt-0.5">Nick: {acc.nick}</div>}
                         </td>
-                        <td className="p-4 flex gap-2">
+                        <td className="p-4">
                           <button 
                             onClick={(e) => { e.stopPropagation(); handleToggleCreateAccess(acc.id, !acc.canCreateForoom); }}
                             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer border ${acc.canCreateForoom ? 'bg-urban-park/10 border-urban-park/30 text-urban-park hover:bg-urban-park/20' : 'bg-urban-concrete/5 border-urban-concrete/20 text-urban-concrete hover:bg-urban-concrete/10'}`}
@@ -424,16 +416,6 @@ export default function AdminDashboard() {
                               <><CheckCircle2 className="w-3.5 h-3.5"/> Creator</>
                             ) : (
                               <><XCircle className="w-3.5 h-3.5"/> Builder</>
-                            )}
-                          </button>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); handleToggleAdminRole(acc.id, acc.role !== "admin"); }}
-                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer border ${acc.role === "admin" ? 'bg-urban-signal/10 border-urban-signal/30 text-urban-signal hover:bg-urban-signal/20' : 'bg-urban-concrete/5 border-urban-concrete/20 text-urban-concrete hover:bg-urban-concrete/10'}`}
-                          >
-                            {acc.role === "admin" ? (
-                              <><CheckCircle2 className="w-3.5 h-3.5"/> Admin</>
-                            ) : (
-                              <><XCircle className="w-3.5 h-3.5"/> Standard</>
                             )}
                           </button>
                         </td>

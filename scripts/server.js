@@ -909,7 +909,23 @@ wss.on("connection", (ws, req) => {
     }
     const roomClients = rooms.get(roomName);
     roomClients.add(ws);
-    console.log(`[room:${roomName}] Connected: ${ws.state.id} (${email})`);
+
+    // Resolve Foroom-specific role
+    const foroom = Object.values(db.forooms).find(f => f.name.toLowerCase() === roomName.toLowerCase());
+    if (foroom) {
+      const userEmailLower = email.toLowerCase();
+      if (foroom.creatorEmail && foroom.creatorEmail.toLowerCase() === userEmailLower) {
+        ws.state.role = "admin";
+      } else if (email === "admin@forooms.app" || email === "poturaksemir@gmail.com") {
+        ws.state.role = "admin";
+      } else if (foroom.userRoles && foroom.userRoles[userEmailLower]) {
+        ws.state.role = foroom.userRoles[userEmailLower];
+      } else {
+        ws.state.role = "guest";
+      }
+    }
+
+    console.log(`[room:${roomName}] Connected: ${ws.state.id} (${email}) with role: ${ws.state.role}`);
 
     // Helper to send logs to this client
     const getLogs = () => {
@@ -959,6 +975,7 @@ wss.on("connection", (ws, req) => {
     // Send init payload
     ws.send(JSON.stringify({
       type: "init",
+      role: ws.state.role,
       edits: Object.values(roomEdits),
       infoBlocks: roomInfoBlocks,
       appearance: roomAppearance,
@@ -1043,6 +1060,14 @@ wss.on("connection", (ws, req) => {
             if (target) {
               target.state.role = msg.newRole;
               addLog("role_change", `${ws.state.email} changed ${target.state.email}'s role to ${msg.newRole}`);
+              
+              const foroom = Object.values(db.forooms).find(f => f.name.toLowerCase() === roomName.toLowerCase());
+              if (foroom) {
+                if (!foroom.userRoles) foroom.userRoles = {};
+                foroom.userRoles[target.state.email.toLowerCase()] = msg.newRole;
+                saveDb();
+              }
+
               broadcastPresence();
               
               target.send(JSON.stringify({
