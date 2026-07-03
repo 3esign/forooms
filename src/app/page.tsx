@@ -665,7 +665,7 @@ export default function Home() {
                             </div>
                           )}
 
-                          {isExistingForoom && (
+                          {isExistingForoom ? (
                             <button 
                               onClick={() => {
                                 if (activeAccount) {
@@ -680,16 +680,16 @@ export default function Home() {
                               {activeAccount ? "Enter Room" : "Enter as Guest"}
                               <ChevronRight className="w-4 h-4" />
                             </button>
-                          )}
-                          
-                          {activeAccount?.canCreateForoom && (
-                            <button 
-                              onClick={handleCreateForoom}
-                              className="w-full py-3 bg-urban-blueprint hover:bg-blue-500 text-white rounded-xl font-bold tracking-wide transition-all flex items-center justify-center gap-2 cursor-pointer text-sm shadow-[0_0_20px_rgba(47,129,247,0.3)]"
-                            >
-                              {isExistingForoom ? "Enter Creator Server" : "Initialize Voxel Server"}
-                              <ChevronRight className="w-4 h-4" />
-                            </button>
+                          ) : (
+                            activeAccount?.canCreateForoom && (
+                              <button 
+                                onClick={handleCreateForoom}
+                                className="w-full py-3 bg-urban-blueprint hover:bg-blue-500 text-white rounded-xl font-bold tracking-wide transition-all flex items-center justify-center gap-2 cursor-pointer text-sm shadow-[0_0_20px_rgba(47,129,247,0.3)]"
+                              >
+                                Initialize Voxel Server
+                                <ChevronRight className="w-4 h-4" />
+                              </button>
+                            )
                           )}
                         </>
                       );
