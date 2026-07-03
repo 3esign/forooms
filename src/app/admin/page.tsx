@@ -137,6 +137,13 @@ export default function AdminDashboard() {
     } as AuthMessage));
   };
 
+  const handleToggleAdminRole = (accountId: string, isAdmin: boolean) => {
+    socket.send(JSON.stringify({
+      type: "toggle_admin_role",
+      payload: { accountId, isAdmin, adminPin: pin }
+    } as AuthMessage));
+  };
+
   const handleRejectRequest = (requestId: string) => {
     socket.send(JSON.stringify({
       type: "reject_request",
@@ -217,7 +224,11 @@ export default function AdminDashboard() {
           <button 
             onClick={() => {
               // Store admin pin temporarily in session storage to auto-login on map page
-              sessionStorage.setItem("admin_auto_login", pin);
+              try {
+                sessionStorage.setItem("admin_auto_login", pin);
+              } catch {}
+              // Legacy cleanup (older builds used localStorage; keeping this prevents sticky auto-logins)
+              localStorage.removeItem("admin_auto_login");
               window.location.href = "/";
             }}
             className="px-6 py-2 bg-urban-blueprint hover:bg-blue-500 text-white rounded-xl font-bold tracking-wide transition-all shadow-[0_0_15px_rgba(47,129,247,0.3)] cursor-pointer"
@@ -384,7 +395,7 @@ export default function AdminDashboard() {
                   <thead className="bg-black/20">
                     <tr>
                       <th className="p-4 font-semibold text-urban-concrete uppercase tracking-wider">Account</th>
-                      <th className="p-4 font-semibold text-urban-concrete uppercase tracking-wider">Create Access</th>
+                      <th className="p-4 font-semibold text-urban-concrete uppercase tracking-wider">Access / Admin</th>
                       <th className="p-4 font-semibold text-urban-concrete uppercase tracking-wider text-right">Actions</th>
                     </tr>
                   </thead>
@@ -404,15 +415,25 @@ export default function AdminDashboard() {
                           <div>{acc.email}</div>
                           {acc.nick && <div className="text-[10px] text-urban-park font-bold uppercase tracking-wider mt-0.5">Nick: {acc.nick}</div>}
                         </td>
-                        <td className="p-4">
+                        <td className="p-4 flex gap-2">
                           <button 
-                            onClick={() => handleToggleCreateAccess(acc.id, !acc.canCreateForoom)}
+                            onClick={(e) => { e.stopPropagation(); handleToggleCreateAccess(acc.id, !acc.canCreateForoom); }}
                             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer border ${acc.canCreateForoom ? 'bg-urban-park/10 border-urban-park/30 text-urban-park hover:bg-urban-park/20' : 'bg-urban-concrete/5 border-urban-concrete/20 text-urban-concrete hover:bg-urban-concrete/10'}`}
                           >
                             {acc.canCreateForoom ? (
                               <><CheckCircle2 className="w-3.5 h-3.5"/> Creator</>
                             ) : (
                               <><XCircle className="w-3.5 h-3.5"/> Builder</>
+                            )}
+                          </button>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); handleToggleAdminRole(acc.id, acc.role !== "admin"); }}
+                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer border ${acc.role === "admin" ? 'bg-urban-signal/10 border-urban-signal/30 text-urban-signal hover:bg-urban-signal/20' : 'bg-urban-concrete/5 border-urban-concrete/20 text-urban-concrete hover:bg-urban-concrete/10'}`}
+                          >
+                            {acc.role === "admin" ? (
+                              <><CheckCircle2 className="w-3.5 h-3.5"/> Admin</>
+                            ) : (
+                              <><XCircle className="w-3.5 h-3.5"/> Standard</>
                             )}
                           </button>
                         </td>

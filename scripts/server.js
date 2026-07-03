@@ -498,15 +498,16 @@ wss.on("connection", (ws, req) => {
 
           resetFailedAttempts(ip);
           const email = googleUser.email.toLowerCase();
+          const adminAccEntry = Object.entries(db.accounts).find(([key, val]) => val.email.toLowerCase() === email);
+          const existingAcc = adminAccEntry ? adminAccEntry[1] : null;
 
           // Check if this is the admin (poturaksemir@gmail.com)
-          const isAdminEmail = email === "poturaksemir@gmail.com" || email === ADMIN_EMAIL.toLowerCase();
+          const isAdminEmail = email === "poturaksemir@gmail.com" || email === ADMIN_EMAIL.toLowerCase() || (existingAcc && existingAcc.role === "admin");
 
           if (isAdminEmail) {
             // Auto-create/update admin account in db.accounts
             let dbUpdated = false;
             let adminAcc;
-            let adminAccEntry = Object.entries(db.accounts).find(([key, val]) => val.email.toLowerCase() === email);
 
             if (!adminAccEntry) {
               const accId = crypto.randomUUID();
@@ -520,7 +521,8 @@ wss.on("connection", (ws, req) => {
                 nick: googleUser.name || "Admin",
                 avatarColor: "#ef4444",
                 avatarNodes: 8,
-                googlePicture: googleUser.picture
+                googlePicture: googleUser.picture,
+                role: "admin"
               };
               db.accounts[accId] = adminAcc;
               dbUpdated = true;
@@ -534,6 +536,10 @@ wss.on("connection", (ws, req) => {
               }
               if (!adminAcc.canCreateForoom) {
                 adminAcc.canCreateForoom = true;
+                dbUpdated = true;
+              }
+              if (adminAcc.role !== "admin") {
+                adminAcc.role = "admin";
                 dbUpdated = true;
               }
               if (!adminAcc.googlePicture && googleUser.picture) {
@@ -557,7 +563,7 @@ wss.on("connection", (ws, req) => {
             });
 
             const safeAccount = { ...adminAcc, passwordHash: undefined, passwordSalt: undefined };
-            ws.send(JSON.stringify({ type: "login_success", payload: { account: safeAccount, token: sessionToken } }));
+            ws.send(JSON.stringify({ type: "login_success", payload: { account: safeAccount, token: sessionToken, adminPin: ADMIN_PIN } }));
             return;
           }
 
@@ -693,7 +699,8 @@ wss.on("connection", (ws, req) => {
           msg.type === "approve_request" ||
           msg.type === "reject_request" ||
           msg.type === "delete_request" ||
-          msg.type === "toggle_create_access"
+          msg.type === "toggle_create_access" ||
+          msg.type === "toggle_admin_role"
         ) {
           const ip = ws.ip;
           if (isRateLimited(ip)) {
@@ -870,6 +877,20 @@ wss.on("connection", (ws, req) => {
             const acc = db.accounts[msg.payload.accountId];
             if (acc) {
               acc.canCreateForoom = msg.payload.canCreateForoom;
+              saveDb();
+              broadcastAdmins();
+            }
+          }
+          else if (msg.type === "toggle_admin_role") {
+            const acc = db.accounts[msg.payload.accountId];
+            if (acc) {
+              acc.role = msg.payload.isAdmin ? "admin" : "builder";
+              if (msg.payload.isAdmin) {
+                acc.id = "admin";
+                acc.canCreateForoom = true;
+              } else {
+                acc.id = msg.payload.accountId;
+              }
               saveDb();
               broadcastAdmins();
             }

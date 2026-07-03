@@ -8,6 +8,7 @@ export interface UserAccount {
   nick?: string;
   avatarColor?: string;
   avatarNodes?: number;
+  role?: string;
 }
 
 export interface AccessRequest {
@@ -40,7 +41,8 @@ export type AuthMessage =
   | { type: "approve_request", payload: { requestId: string; adminPin: string } }
   | { type: "reject_request", payload: { requestId: string; adminPin: string } }
   | { type: "delete_request", payload: { requestId: string; adminPin: string } }
-  | { type: "toggle_create_access", payload: { accountId: string; canCreateForoom: boolean; adminPin: string } };
+  | { type: "toggle_create_access", payload: { accountId: string; canCreateForoom: boolean; adminPin: string } }
+  | { type: "toggle_admin_role", payload: { accountId: string; isAdmin: boolean; adminPin: string } };
 
 export type AuthResponse = 
   | { type: "login_success", payload: { account: Omit<UserAccount, "passwordHash" | "passwordSalt">; token: string } }

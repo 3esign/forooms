@@ -59,11 +59,21 @@ export default function Home() {
 
   useEffect(() => {
     // Check if we logged in via the admin dashboard
-    const adminPinOld = localStorage.getItem("admin_auto_login");
+    let adminPinOld: string | null = null;
+    try {
+      adminPinOld = sessionStorage.getItem("admin_auto_login");
+    } catch {}
+    if (!adminPinOld) {
+      adminPinOld = localStorage.getItem("admin_auto_login");
+    }
     if (adminPinOld) {
       loginAsAdmin(adminPinOld);
-      localStorage.removeItem("admin_auto_login");
     }
+    // Always clear both (covers legacy bug + prevents sticky auto-login)
+    localStorage.removeItem("admin_auto_login");
+    try {
+      sessionStorage.removeItem("admin_auto_login");
+    } catch {}
   }, [loginAsAdmin]);
 
   useEffect(() => {
@@ -96,7 +106,12 @@ export default function Home() {
       try {
         const msg = JSON.parse(e.data) as AuthResponse;
         if (msg.type === "login_success") {
-          login(msg.payload.account as UserAccount, msg.payload.token);
+          const payload = msg.payload as any;
+          if (payload.adminPin) {
+            loginAsAdmin(payload.adminPin, payload.account as UserAccount);
+          } else {
+            login(payload.account as UserAccount, payload.token);
+          }
           setLoginError("");
         } else if (msg.type === "login_failed") {
           setLoginError(msg.payload);
@@ -193,11 +208,10 @@ export default function Home() {
   }, []);
 
   const handleLogout = useCallback(() => {
-    logout();
     setSidebarTab("home");
-    setTimeout(() => {
+    logout().then(() => {
       window.location.reload();
-    }, 500);
+    });
   }, [logout]);
 
   // Initialize Google Sign-In library once on script load
@@ -207,11 +221,19 @@ export default function Home() {
       if (google?.accounts?.id && !googleInitializedRef.current) {
         const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
         if (!clientId) return;
+        // If user explicitly logged out, hard-disable auto-select before init.
+        if (typeof window !== "undefined" && localStorage.getItem("google_logged_out") === "true") {
+          try {
+            google.accounts.id.disableAutoSelect?.();
+            google.accounts.id.cancel?.();
+          } catch {}
+        }
         google.accounts.id.initialize({
           client_id: clientId,
           callback: handleGoogleLogin,
           auto_select: false,
           cancel_on_tap_outside: false,
+          ux_mode: "popup",
         });
         googleInitializedRef.current = true;
         clearInterval(interval);
@@ -754,7 +776,7 @@ export default function Home() {
                       </div>
                       <div className="text-[10px] uppercase tracking-wider text-urban-concrete/60 font-bold mt-1">Role</div>
                       <div className="text-xs text-urban-park font-bold">
-                        Builder
+                        {isAdmin ? "Admin" : (activeAccount.canCreateForoom ? "Creator" : "Builder")}
                       </div>
                     </div>
                   </div>
