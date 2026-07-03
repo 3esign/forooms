@@ -18,19 +18,85 @@ import {
 } from "./types";
 import { normalizeBbox } from "./query";
 
-export function parseHeightLevels(tags: Record<string, string>): number {
-  const levels = parseInt(tags["building:levels"], 10);
-  if (!Number.isNaN(levels) && levels > 0) return levels;
+// Simple hash for deterministic variation based on building ID
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash;
+}
 
-  const raw = tags["building:height"];
-  if (raw) {
+export function parseHeightLevels(tags: Record<string, string>, type: string, id: string, coordinates: LatLng[]): number {
+  const floorHeight = 3.0;
+  let levels = -1;
+
+  // Tier 1: Direct OSM Tags
+  if (tags["building:levels"]) {
+    const parsed = parseInt(tags["building:levels"], 10);
+    if (!Number.isNaN(parsed) && parsed > 0) levels = parsed;
+  }
+  if (levels === -1 && tags["building:height"]) {
+    const raw = tags["building:height"];
     const meters = parseFloat(raw.replace(/m$/i, "").trim());
-    if (!Number.isNaN(meters) && meters > 0) {
-      return Math.max(1, Math.round(meters / 3));
-    }
+    if (!Number.isNaN(meters) && meters > 0) levels = Math.max(1, Math.round(meters / floorHeight));
+  }
+  if (levels === -1 && tags["height"]) {
+    const raw = tags["height"];
+    const meters = parseFloat(raw.replace(/m$/i, "").trim());
+    if (!Number.isNaN(meters) && meters > 0) levels = Math.max(1, Math.round(meters / floorHeight));
   }
 
-  return 3;
+  // Add roof levels if present
+  if (levels !== -1 && tags["roof:levels"]) {
+    const parsedRoof = parseInt(tags["roof:levels"], 10);
+    if (!Number.isNaN(parsedRoof) && parsedRoof > 0) levels += parsedRoof;
+  }
+
+  // Tier 2: Type-based defaults
+  if (levels === -1) {
+    const lType = type.toLowerCase();
+    if (lType === "garage" || lType === "shed" || lType === "cabin" || lType === "kiosk") levels = 1;
+    else if (lType === "house" || lType === "detached" || lType === "residential") levels = 2;
+    else if (lType === "terrace" || lType === "row_house") levels = 3;
+    else if (lType === "church" || lType === "cathedral") levels = 6;
+    else if (lType === "apartments" || lType === "commercial" || lType === "office") levels = 5;
+    else if (lType === "industrial" || lType === "warehouse") levels = 3;
+    else if (lType === "skyscraper" || lType === "tower") levels = 15;
+  }
+
+  // Tier 3: Footprint Area Heuristic (if still -1)
+  if (levels === -1 && coordinates.length >= 3) {
+    // Very rough area estimation in degrees squared, converted to approx m^2
+    // 1 deg lat ~ 111,000m. 1 deg lng ~ 111,000m * cos(lat)
+    let areaDeg = 0;
+    for (let i = 0; i < coordinates.length; i++) {
+      const p1 = coordinates[i];
+      const p2 = coordinates[(i + 1) % coordinates.length];
+      areaDeg += (p1.lng * p2.lat) - (p2.lng * p1.lat);
+    }
+    areaDeg = Math.abs(areaDeg / 2);
+    
+    // Convert to approx square meters
+    const avgLat = coordinates[0].lat;
+    const mPerDegLat = 111320;
+    const mPerDegLng = 40075000 * Math.cos(avgLat * Math.PI / 180) / 360;
+    const areaSqMeters = areaDeg * mPerDegLat * mPerDegLng;
+    
+    // Estimate levels based on area
+    levels = Math.max(2, Math.round(Math.sqrt(areaSqMeters) / 6));
+    levels = Math.min(levels, 8); // Cap area-based heuristic at 8 levels
+  }
+
+  if (levels === -1) levels = 3; // Final fallback
+
+  // Tier 4: Seeded micro-variation (-1, 0, or 1)
+  const hash = hashString(id);
+  const variation = (Math.abs(hash) % 3) - 1; 
+  levels = Math.max(1, levels + variation);
+
+  return levels;
 }
 
 export function parseOverpassElements(elements: OverpassElement[]): OSMDataResult {
@@ -65,7 +131,7 @@ export function parseOverpassElements(elements: OverpassElement[]): OSMDataResul
       buildings.push({
         id,
         coordinates,
-        heightLevels: parseHeightLevels(tags),
+        heightLevels: parseHeightLevels(tags, tags.building, id, coordinates),
         type: tags.building,
       });
     } else if (tags.highway) {

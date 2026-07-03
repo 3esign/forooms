@@ -17,6 +17,148 @@ export interface Cuboid {
  * 
  * Returns a map of BlockId -> Array of Cuboids.
  */
+const CHUNK_SIZE = 16;
+
+function toChunk(v: number): number {
+  return Math.floor(v / CHUNK_SIZE);
+}
+
+/**
+ * Remesh only the 16³ chunks touched by a single voxel edit.
+ * Falls back to full remesh when chunk state is unavailable.
+ */
+export function patchMeshedChunksAfterEdit(
+  grid: CityGrid,
+  current: Record<number, Cuboid[]>,
+  x: number,
+  y: number,
+  z: number,
+  oldBlockId: number,
+  newBlockId: number
+): Record<number, Cuboid[]> {
+  const affectedMaterials = new Set<number>();
+  if (oldBlockId !== BlockId.Air) affectedMaterials.add(oldBlockId);
+  if (newBlockId !== BlockId.Air) affectedMaterials.add(newBlockId);
+  if (affectedMaterials.size === 0) return current;
+
+  const cx = toChunk(x);
+  const cy = toChunk(y);
+  const cz = toChunk(z);
+
+  const next: Record<number, Cuboid[]> = { ...current };
+  for (const blockId of affectedMaterials) {
+    next[blockId] = (next[blockId] ?? []).filter((c) => {
+      const ccx = toChunk(c.x);
+      const ccy = toChunk(c.y);
+      const ccz = toChunk(c.z);
+      return !(ccx === cx && ccy === cy && ccz === cz);
+    });
+  }
+
+  const chunkMeshes = greedyMeshChunks(grid, [{ cx, cy, cz }], affectedMaterials);
+  for (const [idStr, cuboids] of Object.entries(chunkMeshes)) {
+    const blockId = Number(idStr);
+    next[blockId] = [...(next[blockId] ?? []), ...cuboids];
+  }
+
+  return next;
+}
+
+function greedyMeshChunks(
+  grid: CityGrid,
+  chunks: { cx: number; cy: number; cz: number }[],
+  materialsFilter?: Set<number>
+): Record<number, Cuboid[]> {
+  const result: Record<number, Cuboid[]> = {};
+
+  for (const { cx, cy, cz } of chunks) {
+    const startX = cx * CHUNK_SIZE;
+    const startY = cy * CHUNK_SIZE;
+    const startZ = cz * CHUNK_SIZE;
+    const endX = startX + CHUNK_SIZE - 1;
+    const endY = startY + CHUNK_SIZE - 1;
+    const endZ = startZ + CHUNK_SIZE - 1;
+
+    const materials = new Set<number>();
+    for (let x = startX; x <= endX; x++) {
+      for (let y = startY; y <= endY; y++) {
+        for (let z = startZ; z <= endZ; z++) {
+          const b = grid.getVoxel(x, y, z);
+          if (b !== BlockId.Air) materials.add(b);
+        }
+      }
+    }
+
+    const width = CHUNK_SIZE;
+    const depth = CHUNK_SIZE;
+    const mask = new Int8Array(width * depth);
+
+    for (const blockId of materials) {
+      if (materialsFilter && !materialsFilter.has(blockId)) continue;
+
+      const cuboids: Cuboid[] = [];
+
+      for (let y = startY; y <= endY; y++) {
+        let maskIdx = 0;
+        for (let lx = 0; lx < width; lx++) {
+          for (let lz = 0; lz < depth; lz++) {
+            const actualX = startX + lx;
+            const actualZ = startZ + lz;
+            const b = grid.getVoxel(actualX, y, actualZ);
+            mask[maskIdx++] = b === blockId ? 1 : 0;
+          }
+        }
+
+        maskIdx = 0;
+        for (let lx = 0; lx < width; lx++) {
+          for (let lz = 0; lz < depth; lz++) {
+            if (mask[maskIdx] === 1) {
+              let w = 1;
+              while (lx + w < width && mask[maskIdx + w * depth] === 1) w++;
+
+              let d = 1;
+              let done = false;
+              while (lz + d < depth) {
+                for (let i = 0; i < w; i++) {
+                  if (mask[maskIdx + i * depth + d] !== 1) {
+                    done = true;
+                    break;
+                  }
+                }
+                if (done) break;
+                d++;
+              }
+
+              cuboids.push({
+                x: startX + lx,
+                y,
+                z: startZ + lz,
+                w,
+                h: 1,
+                d,
+              });
+
+              for (let i = 0; i < w; i++) {
+                for (let j = 0; j < d; j++) {
+                  mask[maskIdx + i * depth + j] = 0;
+                }
+              }
+            }
+            maskIdx++;
+          }
+        }
+      }
+
+      if (cuboids.length > 0) {
+        if (!result[blockId]) result[blockId] = [];
+        result[blockId].push(...cuboids);
+      }
+    }
+  }
+
+  return result;
+}
+
 export function greedyMeshGrid(grid: CityGrid): Record<number, Cuboid[]> {
   const result: Record<number, Cuboid[]> = {};
   
@@ -46,7 +188,6 @@ export function greedyMeshGrid(grid: CityGrid): Record<number, Cuboid[]> {
   const mask = new Int8Array(width * depth);
 
   for (const blockId of materials) {
-    if (blockId === BlockId.Grass) continue; // Grass is handled by ground plane
 
     const cuboids: Cuboid[] = [];
 
@@ -142,7 +283,15 @@ export function greedyMeshGrid(grid: CityGrid): Record<number, Cuboid[]> {
  * Converts a list of Cuboids into a single optimized THREE.BufferGeometry.
  * UVs are mapped such that a 1x1 texture perfectly tiles across W, H, D.
  */
-export function buildGeometryFromCuboids(cuboids: Cuboid[]): THREE.BufferGeometry {
+export function buildGeometryFromCuboids(cuboids: Cuboid[], blockId: number): THREE.BufferGeometry {
+  // PODIUM_Y offset for urban surfaces - set to 0.0 to keep level with base terrain
+  const PODIUM_Y = 0.0;
+  const isUrban = [
+    BlockId.Concrete, BlockId.Wall, BlockId.Asphalt, BlockId.Sidewalk,
+    BlockId.Railway, BlockId.Platform, BlockId.Parking, BlockId.Footpath, BlockId.ServiceRoad
+  ].includes(blockId);
+  const yOffset = isUrban ? PODIUM_Y : 0;
+
   const positions: number[] = [];
   const normals: number[] = [];
   const uvs: number[] = [];
@@ -157,9 +306,9 @@ export function buildGeometryFromCuboids(cuboids: Cuboid[]): THREE.BufferGeometr
     // Let's output voxel coordinates (where 1 unit = 1 voxel block).
     // The VoxelMesh component handles the * 2 scale.
     
-    const px = c.x;
-    const py = c.y;
-    const pz = c.z;
+    const px = c.x - 0.5;
+    const py = c.y - 0.5 + yOffset;
+    const pz = c.z - 0.5;
     const w = c.w;
     const h = c.h;
     const d = c.d;
@@ -261,15 +410,6 @@ export function buildGeometryFromCuboids(cuboids: Cuboid[]): THREE.BufferGeometr
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
 
-  // We are creating voxels centered on the origin, so shift the vertices slightly 
-  // to match the previous instanced mesh behavior if necessary.
-  // Wait, our old InstancedMesh did `mesh.position.set(v.position.x * 2, v.position.y * 2, v.position.z * 2)`.
-  // And the `BoxGeometry` had `args={[2, 2, 2]}`. So its corners went from -1 to 1 around the center.
-  // Our geometry above defines coordinates from px to px+w.
-  // To perfectly match, we scale by 2, and shift by -1 so it matches the center of the voxel!
-  
-  geometry.scale(2, 2, 2);
-  geometry.translate(-1, -1, -1);
-
+  // We no longer need to scale or translate since we use a 1:1 scale.
   return geometry;
 }

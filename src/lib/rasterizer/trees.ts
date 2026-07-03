@@ -44,6 +44,7 @@ export function runTreePass(grid: CityGrid, prng: PRNG) {
       if (nearRoadOrWater) continue;
 
       // Set tree trunk
+      grid.setVoxel(x, 0, z, BlockId.Wood);
       grid.setVoxel(x, 1, z, BlockId.Wood);
       grid.setVoxel(x, 2, z, BlockId.Wood);
       grid.setVoxel(x, 3, z, BlockId.Wood);

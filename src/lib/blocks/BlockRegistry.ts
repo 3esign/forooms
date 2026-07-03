@@ -27,6 +27,8 @@ export enum BlockId {
   Scrub = 22,
   Cemetery = 23,
   PowerTower = 24,
+  BrickFacade = 25,
+  GlassFacade = 26,
 }
 
 export interface BlockDef {
@@ -338,6 +340,32 @@ export const BLOCK_REGISTRY: Map<BlockId, BlockDef> = new Map([
       borderColor: "#29401e",
       castsShadow: false,
       isGround: true,
+    },
+  ],
+  [
+    BlockId.BrickFacade,
+    {
+      id: BlockId.BrickFacade,
+      name: "Brick Facade",
+      textureType: "brick_facade",
+      baseColor: "#a87c5c",
+      noiseColors: ["#8b5b3a", "#be9474"],
+      borderColor: "#6a452a",
+      castsShadow: true,
+      isGround: false,
+    },
+  ],
+  [
+    BlockId.GlassFacade,
+    {
+      id: BlockId.GlassFacade,
+      name: "Glass Facade",
+      textureType: "glass_facade",
+      baseColor: "#1a2533",
+      noiseColors: ["#15202e", "#233347"],
+      borderColor: "#0f1620",
+      castsShadow: true,
+      isGround: false,
     },
   ],
 ]);

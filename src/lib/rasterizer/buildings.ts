@@ -3,16 +3,16 @@ import { BlockId } from "../blocks/BlockRegistry";
 import { rasterizePolygon } from "./core";
 
 const BUILDING_MATERIAL_MAP: Record<string, BlockId> = {
-  house: BlockId.ZoneResidential,
+  house: BlockId.Concrete,
   apartments: BlockId.Concrete,
-  commercial: BlockId.ZoneCommercial,
-  retail: BlockId.ZoneRetail,
-  industrial: BlockId.ZoneIndustrial,
+  commercial: BlockId.Concrete,
+  retail: BlockId.Concrete,
+  industrial: BlockId.Concrete,
   church: BlockId.Wall,
-  garage: BlockId.ServiceRoad,
-  school: BlockId.ZoneResidential,
-  university: BlockId.ZoneResidential,
-  hospital: BlockId.ZoneCommercial,
+  garage: BlockId.Concrete,
+  school: BlockId.Concrete,
+  university: BlockId.Concrete,
+  hospital: BlockId.Concrete,
 };
 
 export function paintBuildingOnGrid(
@@ -25,7 +25,15 @@ export function paintBuildingOnGrid(
   const voxelsPerLevel = 2;
   const buildingHeight = Math.max(2, heightLevels * voxelsPerLevel);
 
-  const material = BUILDING_MATERIAL_MAP[type.toLowerCase()] || BlockId.Concrete;
+  let material = BUILDING_MATERIAL_MAP[type.toLowerCase()] || BlockId.Concrete;
+
+  if (material === BlockId.Concrete) {
+    // Deterministic selection based on footprint to create variety in facades
+    const sumCoords = vertices.reduce((sum, pt) => sum + pt[0] + pt[1], 0);
+    const hash = Math.floor(Math.abs(sumCoords) * 1000) % 3;
+    if (hash === 1) material = BlockId.BrickFacade;
+    else if (hash === 2) material = BlockId.GlassFacade;
+  }
 
   for (const [x, z] of footprint) {
     for (let y = 1; y <= buildingHeight; y++) {

@@ -1,6 +1,7 @@
 import { OSMDataResult, OverpassElement, Bbox, LatLng } from "./types";
 import { normalizeBbox, OVERPASS_ENDPOINTS, OVERPASS_USER_AGENT, buildOverpassQuery } from "./query";
 import { parseOverpassElements, parseOSMXml, generateMockData } from "./parser";
+import { get, set } from "idb-keyval";
 
 export async function fetchOverpass(query: string, globalSignal: AbortSignal): Promise<OverpassElement[]> {
   let lastError: unknown;
@@ -108,6 +109,17 @@ export async function queryOverpassApi(bbox: Bbox): Promise<OSMDataResult> {
 
 export async function fetchOSMData(bbox: Bbox): Promise<OSMDataResult> {
   const [w, s, e, n] = normalizeBbox(bbox);
+  const cacheKey = `osm-${w}-${s}-${e}-${n}`;
+
+  try {
+    const cached = await get(cacheKey);
+    if (cached) {
+      console.log("OSM cache hit from IndexedDB");
+      return cached as OSMDataResult;
+    }
+  } catch (err) {
+    console.warn("IndexedDB read failed", err);
+  }
   
   try {
     const response = await fetch(`/api/osm?w=${w}&s=${s}&e=${e}&n=${n}`, {
@@ -126,6 +138,12 @@ export async function fetchOSMData(bbox: Bbox): Promise<OSMDataResult> {
         return generateMockData(bbox);
       }
       throw new Error("No buildings found in selected area. Try a denser urban region.");
+    }
+
+    try {
+      await set(cacheKey, data);
+    } catch (err) {
+      console.warn("IndexedDB write failed", err);
     }
 
     return data;

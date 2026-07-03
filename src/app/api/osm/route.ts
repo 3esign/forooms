@@ -15,6 +15,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invalid bbox parameters" }, { status: 400 });
   }
 
+  // Cap bbox size to 2x2 km (4 km²) to prevent Overpass API abuse
+  const latDiff = Math.abs(n - s);
+  const lonDiff = Math.abs(e - w);
+  const avgLatRad = ((n + s) / 2) * (Math.PI / 180);
+  const heightKm = latDiff * 111;
+  const widthKm = lonDiff * 111 * Math.cos(avgLatRad);
+  const areaKm2 = heightKm * widthKm;
+
+  if (areaKm2 > 4.5) {
+    return NextResponse.json({ error: "Bounding box area exceeds the 2x2 km (4 km²) limit" }, { status: 400 });
+  }
+
   const bbox = normalizeBbox([w, s, e, n]);
 
   try {

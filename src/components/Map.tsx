@@ -3,20 +3,22 @@
 import React, { useRef, useEffect, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-
 import { normalizeBbox } from "@/lib/osm";
+import { ActiveForoom } from "../../party/auth";
 
 interface MapProps {
   onBoundingBoxSelect: (bbox: [number, number, number, number] | null) => void;
+  forooms: ActiveForoom[];
+  allowDrawing: boolean;
   center?: [number, number] | null;
   zoom?: number;
 }
 
-export default function Map({ onBoundingBoxSelect, center, zoom: propsZoom }: MapProps) {
+export default function Map({ onBoundingBoxSelect, forooms, allowDrawing, center, zoom: propsZoom }: MapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
-  const [lng] = useState(-73.9855); // Manhattan, NYC
-  const [lat] = useState(40.7580);
+  const [lng] = useState(20.5122); // Novi Pazar
+  const [lat] = useState(43.1367);
   const [zoom] = useState(14);
 
   // Pan to center if changed externally
@@ -29,6 +31,49 @@ export default function Map({ onBoundingBoxSelect, center, zoom: propsZoom }: Ma
       });
     }
   }, [center, propsZoom]);
+
+  // Update existing forooms layer whenever the list changes
+  useEffect(() => {
+    if (!map.current) return;
+    const updateForoomsLayer = () => {
+      const source = map.current?.getSource("existing-forooms") as maplibregl.GeoJSONSource;
+      if (!source) return;
+
+      const features = forooms.map((foroom) => {
+        const [w, s, e, n] = foroom.bbox;
+        return {
+          type: "Feature",
+          properties: {
+            id: foroom.id,
+            name: foroom.name,
+            creatorEmail: foroom.creatorEmail,
+            bbox: foroom.bbox
+          },
+          geometry: {
+            type: "Polygon",
+            coordinates: [[
+              [w, n],
+              [e, n],
+              [e, s],
+              [w, s],
+              [w, n]
+            ]]
+          }
+        };
+      });
+
+      source.setData({
+        type: "FeatureCollection",
+        features: features as any
+      });
+    };
+
+    if (map.current.isStyleLoaded()) {
+      updateForoomsLayer();
+    } else {
+      map.current.on("load", updateForoomsLayer);
+    }
+  }, [forooms]);
 
   useEffect(() => {
     if (map.current) return;
@@ -48,39 +93,6 @@ export default function Map({ onBoundingBoxSelect, center, zoom: propsZoom }: Ma
     let isDrawing = false;
     let startPoint: maplibregl.LngLat | null = null;
     let currentBox: maplibregl.LngLatBounds | null = null;
-
-    map.current.on('load', () => {
-      // Create GeoJSON source for the bounding box
-      map.current!.addSource('selection-box', {
-        type: 'geojson',
-        data: {
-          type: 'FeatureCollection',
-          features: []
-        }
-      });
-
-      // Translucent fill
-      map.current!.addLayer({
-        id: 'selection-box-fill',
-        type: 'fill',
-        source: 'selection-box',
-        paint: {
-          'fill-color': '#2f81f7',
-          'fill-opacity': 0.2
-        }
-      });
-
-      // Solid outline
-      map.current!.addLayer({
-        id: 'selection-box-line',
-        type: 'line',
-        source: 'selection-box',
-        paint: {
-          'line-color': '#2f81f7',
-          'line-width': 2
-        }
-      });
-    });
 
     const updateBox = (bounds: maplibregl.LngLatBounds | null) => {
       const source = map.current?.getSource('selection-box') as maplibregl.GeoJSONSource;
@@ -111,7 +123,91 @@ export default function Map({ onBoundingBoxSelect, center, zoom: propsZoom }: Ma
       });
     };
 
+    map.current.on('load', () => {
+      // Create GeoJSON source for active/registered forooms
+      map.current!.addSource("existing-forooms", {
+        type: "geojson",
+        data: {
+          type: "FeatureCollection",
+          features: []
+        }
+      });
+
+      // Translucent green fill for created forums
+      map.current!.addLayer({
+        id: "existing-forooms-fill",
+        type: "fill",
+        source: "existing-forooms",
+        paint: {
+          "fill-color": "#10b981", // Emerald green
+          "fill-opacity": 0.3
+        }
+      });
+
+      // Green outline
+      map.current!.addLayer({
+        id: "existing-forooms-outline",
+        type: "line",
+        source: "existing-forooms",
+        paint: {
+          "line-color": "#10b981",
+          "line-width": 3
+        }
+      });
+
+      // Selection box
+      map.current!.addSource('selection-box', {
+        type: 'geojson',
+        data: {
+          type: 'FeatureCollection',
+          features: []
+        }
+      });
+
+      map.current!.addLayer({
+        id: 'selection-box-fill',
+        type: 'fill',
+        source: 'selection-box',
+        paint: {
+          'fill-color': '#2f81f7',
+          'fill-opacity': 0.2
+        }
+      });
+
+      map.current!.addLayer({
+        id: 'selection-box-line',
+        type: 'line',
+        source: 'selection-box',
+        paint: {
+          'line-color': '#2f81f7',
+          'line-width': 2
+        }
+      });
+    });
+
+    // Handle clicking on existing forums to select them
+    map.current.on("click", "existing-forooms-fill", (e) => {
+      const feature = e.features?.[0];
+      if (feature && feature.properties) {
+        try {
+          const bbox = JSON.parse(feature.properties.bbox) as [number, number, number, number];
+          onBoundingBoxSelect(bbox);
+        } catch (err) {
+          console.error("Failed to parse bbox", err);
+        }
+      }
+    });
+
+    // Change cursor on hover over existing forooms
+    map.current.on("mouseenter", "existing-forooms-fill", () => {
+      if (map.current) map.current.getCanvas().style.cursor = "pointer";
+    });
+    map.current.on("mouseleave", "existing-forooms-fill", () => {
+      if (map.current) map.current.getCanvas().style.cursor = "";
+    });
+
     map.current.on("mousedown", (e) => {
+      if (!allowDrawing) return; // Disallow guests/unauthorized users
       if (!e.originalEvent.shiftKey) return;
       
       // Start drawing a new box
@@ -160,7 +256,7 @@ export default function Map({ onBoundingBoxSelect, center, zoom: propsZoom }: Ma
       }
     });
 
-  }, [lng, lat, zoom, onBoundingBoxSelect]);
+  }, [lng, lat, zoom, onBoundingBoxSelect, allowDrawing, forooms]);
 
   return <div ref={mapContainer} className="w-full h-full" />;
 }

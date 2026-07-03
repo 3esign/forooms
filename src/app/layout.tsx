@@ -12,6 +12,8 @@ export const metadata: Metadata = {
   description: "A Living Digital Twin web application for civic planning and simulation.",
 };
 
+import { AuthProvider } from "../contexts/AuthContext";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -22,8 +24,10 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} antialiased`}
     >
-      <body className="w-screen h-screen overflow-hidden bg-background text-foreground">
-        {children}
+      <body className="w-screen min-h-screen bg-background text-foreground">
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

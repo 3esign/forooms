@@ -49,4 +49,12 @@ export class CityGrid {
   public getEntries(): IterableIterator<[string, number]> {
     return this.voxels.entries();
   }
+
+  public clone(): CityGrid {
+    const next = new CityGrid(this.width, this.depth);
+    for (const [key, val] of this.voxels.entries()) {
+      next.voxels.set(key, val);
+    }
+    return next;
+  }
 }
