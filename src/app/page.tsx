@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
@@ -52,6 +52,9 @@ export default function Home() {
 
   // Guest mode flag passed to canvas
   const [isGuest, setIsGuest] = useState(false);
+
+  // Google Sign-In
+  const googleBtnRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Check if we logged in via the admin dashboard
@@ -152,6 +155,42 @@ export default function Home() {
       console.error("[home] Failed to send verify_login:", err);
     }
   };
+
+  const handleGoogleLogin = useCallback((response: { credential: string }) => {
+    try {
+      socket.send(JSON.stringify({
+        type: "google_login",
+        payload: { credential: response.credential }
+      }));
+    } catch (err) {
+      console.error("[home] Failed to send google_login:", err);
+    }
+  }, [socket]);
+
+  // Initialize Google Sign-In button
+  useEffect(() => {
+    if (activeAccount || adminPin) return;
+    const interval = setInterval(() => {
+      const google = (window as unknown as Record<string, unknown>).google as { accounts?: { id?: { initialize: (opts: Record<string, unknown>) => void; renderButton: (el: HTMLElement, opts: Record<string, unknown>) => void } } } | undefined;
+      if (google?.accounts?.id && googleBtnRef.current) {
+        clearInterval(interval);
+        const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+        if (!clientId) return;
+        google.accounts.id.initialize({
+          client_id: clientId,
+          callback: handleGoogleLogin,
+        });
+        google.accounts.id.renderButton(googleBtnRef.current, {
+          theme: "filled_black",
+          size: "large",
+          width: "100%",
+          shape: "pill",
+          text: "signin_with",
+        });
+      }
+    }, 300);
+    return () => clearInterval(interval);
+  }, [activeAccount, adminPin, handleGoogleLogin]);
 
   const handleRequestAccess = (e: React.FormEvent) => {
     e.preventDefault();
@@ -602,30 +641,41 @@ export default function Home() {
                   </div>
 
                   {authTab === "login" ? (
-                    <form onSubmit={handleLogin} className="space-y-3">
-                      <input 
-                        type="text" 
-                        placeholder="Email or Admin PIN"
-                        value={loginEmail}
-                        onChange={(e) => setLoginEmail(e.target.value)}
-                        className="w-full bg-urban-void border border-urban-concrete/20 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-urban-blueprint transition-all"
-                      />
-                      <input 
-                        type="password" 
-                        placeholder="Password"
-                        value={loginPassword}
-                        onChange={(e) => setLoginPassword(e.target.value)}
-                        className="w-full bg-urban-void border border-urban-concrete/20 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-urban-blueprint transition-all"
-                      />
-                      {loginError && <p className="text-xs text-urban-brick font-medium">{loginError}</p>}
-                      <button 
-                        type="submit"
-                        disabled={!loginEmail || !loginPassword}
-                        className="w-full py-2.5 bg-urban-blueprint/25 hover:bg-urban-blueprint/40 text-white rounded-xl text-sm font-bold tracking-wide transition-all disabled:opacity-50 cursor-pointer"
-                      >
-                        Authenticate
-                      </button>
-                    </form>
+                    <div className="space-y-3">
+                      {/* Google Sign-In Button */}
+                      <div ref={googleBtnRef} className="w-full flex justify-center" />
+
+                      <div className="flex items-center gap-3 my-2">
+                        <div className="flex-1 h-px bg-urban-concrete/20" />
+                        <span className="text-[10px] text-urban-concrete uppercase tracking-wider font-bold">or use credentials</span>
+                        <div className="flex-1 h-px bg-urban-concrete/20" />
+                      </div>
+
+                      <form onSubmit={handleLogin} className="space-y-3">
+                        <input 
+                          type="text" 
+                          placeholder="Email or Admin PIN"
+                          value={loginEmail}
+                          onChange={(e) => setLoginEmail(e.target.value)}
+                          className="w-full bg-urban-void border border-urban-concrete/20 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-urban-blueprint transition-all"
+                        />
+                        <input 
+                          type="password" 
+                          placeholder="Password"
+                          value={loginPassword}
+                          onChange={(e) => setLoginPassword(e.target.value)}
+                          className="w-full bg-urban-void border border-urban-concrete/20 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-urban-blueprint transition-all"
+                        />
+                        {loginError && <p className="text-xs text-urban-brick font-medium">{loginError}</p>}
+                        <button 
+                          type="submit"
+                          disabled={!loginEmail || !loginPassword}
+                          className="w-full py-2.5 bg-urban-blueprint/25 hover:bg-urban-blueprint/40 text-white rounded-xl text-sm font-bold tracking-wide transition-all disabled:opacity-50 cursor-pointer"
+                        >
+                          Authenticate
+                        </button>
+                      </form>
+                    </div>
                   ) : (
                     <form onSubmit={handleRequestAccess} className="space-y-3">
                       <input 

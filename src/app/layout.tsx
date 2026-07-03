@@ -24,6 +24,9 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} antialiased`}
     >
+      <head>
+        <script src="https://accounts.google.com/gsi/client" async defer></script>
+      </head>
       <body className="w-screen min-h-screen bg-background text-foreground">
         <AuthProvider>
           {children}

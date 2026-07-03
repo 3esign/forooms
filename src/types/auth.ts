@@ -33,6 +33,7 @@ export type AuthMessage =
   | { type: "add_account", payload: { email: string; canCreateForoom: boolean; adminPin: string; nick?: string; avatarColor?: string; avatarNodes?: number } }
   | { type: "remove_account", payload: { id: string; adminPin: string } }
   | { type: "verify_login", payload: { email: string; passwordHash: string } }
+  | { type: "google_login", payload: { credential: string } }
   | { type: "fetch_accounts", payload: { adminPin: string } }
   | { type: "request_access", payload: { email: string; description: string; nick: string; avatarColor: string; avatarNodes: number } }
   | { type: "create_foroom", payload: { name: string; bbox: [number, number, number, number]; creatorEmail: string; token?: string } }

@@ -214,6 +214,39 @@ if (!ADMIN_PIN) {
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@forooms.app";
 const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
 const EMAIL_FROM = process.env.EMAIL_FROM || "FOROOMS Access <onboarding@resend.dev>";
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
+
+// Verify Google OAuth JWT credential token
+async function verifyGoogleToken(credential) {
+  try {
+    const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
+    if (!res.ok) {
+      console.error("[google] Token verification failed:", res.status);
+      return null;
+    }
+    const payload = await res.json();
+    // Verify audience matches our client ID
+    if (GOOGLE_CLIENT_ID && payload.aud !== GOOGLE_CLIENT_ID) {
+      console.error("[google] Token audience mismatch:", payload.aud, "expected:", GOOGLE_CLIENT_ID);
+      return null;
+    }
+    // Verify token is not expired
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.exp && parseInt(payload.exp) < now) {
+      console.error("[google] Token expired");
+      return null;
+    }
+    return {
+      email: payload.email,
+      name: payload.name || payload.email.split("@")[0],
+      picture: payload.picture || null,
+      emailVerified: payload.email_verified === "true"
+    };
+  } catch (err) {
+    console.error("[google] Token verification error:", err);
+    return null;
+  }
+}
 
 // Constant-time timing-safe string comparison for security tokens and admin PINs
 function safeCompare(a, b) {
@@ -448,6 +481,57 @@ wss.on("connection", (ws, req) => {
             registerFailedAttempt(ip);
             ws.send(JSON.stringify({ type: "login_failed", payload: "Invalid email or password" }));
           }
+        }
+        else if (msg.type === "google_login") {
+          const ip = ws.ip;
+          if (isRateLimited(ip)) {
+            ws.send(JSON.stringify({ type: "login_failed", payload: "Too many login attempts. Locked out for 15 minutes." }));
+            return;
+          }
+
+          const googleUser = await verifyGoogleToken(msg.payload.credential);
+          if (!googleUser || !googleUser.email) {
+            registerFailedAttempt(ip);
+            ws.send(JSON.stringify({ type: "login_failed", payload: "Google sign-in verification failed" }));
+            return;
+          }
+
+          resetFailedAttempts(ip);
+
+          // Find or create account
+          let account = Object.values(db.accounts).find(a => a.email === googleUser.email);
+          if (!account) {
+            // Auto-register new Google user
+            const accId = crypto.randomUUID();
+            account = {
+              id: accId,
+              email: googleUser.email,
+              passwordHash: null,
+              passwordSalt: null,
+              canCreateForoom: false,
+              createdAt: Date.now(),
+              nick: googleUser.name,
+              avatarColor: "#" + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, "0"),
+              avatarNodes: Math.floor(Math.random() * 5) + 4,
+              googlePicture: googleUser.picture
+            };
+            db.accounts[accId] = account;
+            saveDb();
+            console.log(`[google] Auto-registered new user: ${googleUser.email}`);
+          }
+
+          // Generate session token
+          const sessionToken = crypto.randomUUID();
+          tokens.set(sessionToken, {
+            email: account.email,
+            role: account.canCreateForoom ? "builder" : "builder",
+            nick: account.nick || account.email.split("@")[0],
+            avatarColor: account.avatarColor || "#3b82f6",
+            avatarNodes: account.avatarNodes || 4
+          });
+
+          const safeAccount = { ...account, passwordHash: undefined, passwordSalt: undefined };
+          ws.send(JSON.stringify({ type: "login_success", payload: { account: safeAccount, token: sessionToken } }));
         }
         else if (msg.type === "request_access") {
           const reqId = crypto.randomUUID();
