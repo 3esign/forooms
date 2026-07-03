@@ -213,6 +213,7 @@ if (!ADMIN_PIN) {
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@forooms.app";
 const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
+const EMAIL_FROM = process.env.EMAIL_FROM || "FOROOMS Access <onboarding@resend.dev>";
 
 // Constant-time timing-safe string comparison for security tokens and admin PINs
 function safeCompare(a, b) {
@@ -448,23 +449,30 @@ wss.on("connection", (ws, req) => {
 
           // Resend email notification
           if (RESEND_API_KEY) {
-            try {
-              fetch("https://api.resend.com/emails", {
-                method: "POST",
-                headers: {
-                  "Authorization": `Bearer ${RESEND_API_KEY}`,
-                  "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                  from: "FOROOMS Access <onboarding@resend.dev>",
-                  to: ADMIN_EMAIL,
-                  subject: `New Access Request from ${newReq.email}`,
-                  html: `<p><strong>Email:</strong> ${newReq.email}</p><p><strong>Description:</strong> ${newReq.description}</p><p><a href="https://forooms.vercel.app/admin">Approve/Reject in Admin Dashboard</a></p>`
-                })
-              });
-            } catch (e) {
-              console.error("Resend error", e);
-            }
+            fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${RESEND_API_KEY}`,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({
+                from: EMAIL_FROM,
+                to: ADMIN_EMAIL,
+                subject: `New Access Request from ${newReq.email}`,
+                html: `<p><strong>Email:</strong> ${newReq.email}</p><p><strong>Description:</strong> ${newReq.description}</p><p><a href="https://forooms.vercel.app/admin">Approve/Reject in Admin Dashboard</a></p>`
+              })
+            })
+            .then(res => {
+              if (!res.ok) {
+                return res.text().then(text => {
+                  console.error(`[email] Resend request notification failed with status ${res.status}: ${text}`);
+                });
+              }
+              console.log(`[email] Request notification email sent successfully to admin for ${newReq.email}`);
+            })
+            .catch(err => {
+              console.error("[email] Resend request notification connection error:", err);
+            });
           }
         }
         else if (msg.type === "create_foroom") {
@@ -548,23 +556,30 @@ wss.on("connection", (ws, req) => {
             broadcastAdmins();
 
             if (RESEND_API_KEY) {
-              try {
-                fetch("https://api.resend.com/emails", {
-                  method: "POST",
-                  headers: {
-                    "Authorization": `Bearer ${RESEND_API_KEY}`,
-                    "Content-Type": "application/json"
-                  },
-                  body: JSON.stringify({
-                    from: "FOROOMS Access <onboarding@resend.dev>",
-                    to: msg.payload.email,
-                    subject: "Your FOROOMS Access Credentials!",
-                    html: `<p>Welcome to FOROOMS! An administrator has created an account for you.</p><p>Your temporary password is: <strong>${rawPass}</strong></p><p><a href="https://forooms.vercel.app">Login Here</a></p>`
-                  })
-                });
-              } catch (e) {
-                console.error("Resend account generation email error", e);
-              }
+              fetch("https://api.resend.com/emails", {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${RESEND_API_KEY}`,
+                  "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                  from: EMAIL_FROM,
+                  to: msg.payload.email,
+                  subject: "Your FOROOMS Access Credentials!",
+                  html: `<p>Welcome to FOROOMS! An administrator has created an account for you.</p><p>Your temporary password is: <strong>${rawPass}</strong></p><p><a href="https://forooms.vercel.app">Login Here</a></p>`
+                })
+              })
+              .then(res => {
+                if (!res.ok) {
+                  return res.text().then(text => {
+                    console.error(`[email] Resend manual creation credentials failed with status ${res.status}: ${text}`);
+                  });
+                }
+                console.log(`[email] Credentials email sent successfully to ${msg.payload.email}`);
+              })
+              .catch(err => {
+                console.error("[email] Resend manual creation connection error:", err);
+              });
             }
           }
           else if (msg.type === "remove_account") {
@@ -615,7 +630,7 @@ wss.on("connection", (ws, req) => {
                     "Content-Type": "application/json"
                   },
                   body: JSON.stringify({
-                    from: "FOROOMS Access <onboarding@resend.dev>",
+                    from: EMAIL_FROM,
                     to: reqData.email,
                     subject: "Your FOROOMS Access has been Approved!",
                     html: `<p>Welcome to FOROOMS! Your access request has been approved.</p><p>Your temporary password is: <strong>${rawPass}</strong></p><p><a href="https://forooms.vercel.app">Login Here</a></p>`
