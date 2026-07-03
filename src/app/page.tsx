@@ -217,7 +217,16 @@ export default function Home() {
   // Initialize Google Sign-In library once on script load
   useEffect(() => {
     const interval = setInterval(() => {
-      const google = (window as unknown as Record<string, unknown>).google as { accounts?: { id?: { initialize: (opts: Record<string, unknown>) => void; renderButton: (el: HTMLElement, opts: Record<string, unknown>) => void } } } | undefined;
+      const google = (window as unknown as Record<string, unknown>).google as { 
+        accounts?: { 
+          id?: { 
+            initialize: (opts: Record<string, unknown>) => void; 
+            renderButton: (el: HTMLElement, opts: Record<string, unknown>) => void;
+            disableAutoSelect?: () => void;
+            cancel?: () => void;
+          } 
+        } 
+      } | undefined;
       if (google?.accounts?.id && !googleInitializedRef.current) {
         const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
         if (!clientId) return;
