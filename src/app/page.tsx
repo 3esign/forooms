@@ -28,7 +28,7 @@ export default function Home() {
   const [prefetchStatus, setPrefetchStatus] = useState<"idle" | "fetching" | "completed" | "error">("idle");
   const [prefetchStats, setPrefetchStats] = useState<{ buildings: number; roads: number } | null>(null);
 
-  const { activeAccount, authSessionToken, adminPin, login, loginAsAdmin, logout } = useAuth();
+  const { activeAccount, authSessionToken, adminPin, login, loginAsAdmin, logout, isAdmin } = useAuth();
   const [authTab, setAuthTab] = useState<"login" | "request">("login");
   const [sidebarTab, setSidebarTab] = useState<"home" | "profile" | "admin">("home");
   
@@ -313,7 +313,7 @@ export default function Home() {
   const sessionToken = adminPin || authSessionToken;
 
   if (isVoxelMode && selectedBbox) {
-    const finalRole = adminPin ? "admin" : (isGuest ? "guest" : "builder");
+    const finalRole = isAdmin ? "admin" : (isGuest ? "guest" : "builder");
     return (
       <div className="w-full h-screen relative">
         <VoxelCanvas bbox={selectedBbox} onExit={handleExitForoom} role={finalRole} token={sessionToken} />
@@ -389,7 +389,7 @@ export default function Home() {
             >
               👤 PROFILE
             </button>
-            {adminPin && (
+            {isAdmin && (
               <button
                 onClick={() => setSidebarTab("admin")}
                 className={`flex-1 py-3 text-center text-xs font-bold tracking-wider transition-all border-b-2 cursor-pointer
@@ -619,116 +619,30 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Guest Login/Request inline forms at the bottom */}
+              {/* Guest Google Login Box at the bottom */}
               {!(activeAccount || adminPin) && (
                 <div className="border-t border-urban-concrete/20 pt-6 space-y-4">
-                  {/* Tabs */}
-                  <div className="flex border-b border-urban-concrete/10">
-                    <button 
-                      onClick={() => { setAuthTab("login"); setLoginError(""); setRequestSuccessMsg(""); }}
-                      className={`flex-1 pb-2 text-sm font-bold transition-all border-b-2 cursor-pointer
-                        ${authTab === "login" ? "text-white border-urban-blueprint" : "text-urban-concrete border-transparent"}`}
-                    >
-                      Login
-                    </button>
-                    <button 
-                      onClick={() => { setAuthTab("request"); setLoginError(""); setRequestSuccessMsg(""); }}
-                      className={`flex-1 pb-2 text-sm font-bold transition-all border-b-2 cursor-pointer
-                        ${authTab === "request" ? "text-white border-urban-blueprint" : "text-urban-concrete border-transparent"}`}
-                    >
-                      Request Access
-                    </button>
-                  </div>
+                  <div className="space-y-4">
+                    {/* Google Sign-In Button */}
+                    <div ref={googleBtnRef} className="w-full flex justify-center py-2" />
 
-                  {authTab === "login" ? (
-                    <div className="space-y-4">
-                      {/* Google Sign-In Button */}
-                      <div ref={googleBtnRef} className="w-full flex justify-center py-2" />
-
-                      {loginError === "pending_approval" ? (
-                        <div className="p-4 bg-urban-signal/10 border border-urban-signal/25 rounded-xl text-center">
-                          <p className="text-xs text-urban-signal leading-relaxed font-bold">
-                            Access Pending Approval
-                          </p>
-                          <p className="text-[11px] text-white/70 leading-relaxed mt-1">
-                            Your Google account access request is submitted. You will receive an email notification once the administrator grants you permission.
-                          </p>
-                        </div>
-                      ) : (
-                        loginError && (
-                          <div className="p-3 bg-urban-brick/10 border border-urban-brick/20 rounded-xl text-center">
-                            <p className="text-xs text-urban-brick font-medium">{loginError}</p>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  ) : (
-                    <form onSubmit={handleRequestAccess} className="space-y-3">
-                      <input 
-                        type="text" 
-                        placeholder="Your Nickname / Nick"
-                        value={requestNick}
-                        onChange={(e) => setRequestNick(e.target.value)}
-                        className="w-full bg-urban-void border border-urban-concrete/20 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-urban-blueprint transition-all"
-                        required
-                      />
-                      <input 
-                        type="email" 
-                        placeholder="Your Email"
-                        value={requestEmail}
-                        onChange={(e) => setRequestEmail(e.target.value)}
-                        className="w-full bg-urban-void border border-urban-concrete/20 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-urban-blueprint transition-all"
-                        required
-                      />
-                      <textarea 
-                        placeholder="Why do you want access?"
-                        value={requestDescription}
-                        onChange={(e) => setRequestDescription(e.target.value)}
-                        className="w-full bg-urban-void border border-urban-concrete/20 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-urban-blueprint transition-all h-16 resize-none"
-                        required
-                      />
-
-                      {/* Avatar Customization */}
-                      <div className="bg-[#151515] p-3 rounded-xl border border-white/5 space-y-2">
-                        <div className="text-[10px] font-bold text-urban-concrete uppercase tracking-wider">Configure Avatar</div>
-                        <AvatarPreview color={requestAvatarColor} nodes={requestAvatarNodes} />
-                        <div className="flex gap-2 items-center">
-                          <div className="flex-1">
-                            <label className="text-[10px] text-white/40 block mb-0.5">Avatar Color</label>
-                            <div className="flex items-center gap-2">
-                              <input 
-                                type="color" 
-                                value={requestAvatarColor}
-                                onChange={(e) => setRequestAvatarColor(e.target.value)}
-                                className="w-8 h-8 rounded border border-white/20 bg-transparent cursor-pointer"
-                              />
-                              <span className="text-xs text-white/80 font-mono">{requestAvatarColor}</span>
-                            </div>
-                          </div>
-                          <div className="flex-1">
-                            <label className="text-[10px] text-white/40 block mb-0.5">Body Nodes: {requestAvatarNodes}</label>
-                            <input 
-                              type="range"
-                              min="3"
-                              max="10"
-                              value={requestAvatarNodes}
-                              onChange={(e) => setRequestAvatarNodes(Number(e.target.value))}
-                              className="w-full h-1 bg-urban-void rounded-lg appearance-none cursor-pointer accent-urban-blueprint"
-                            />
-                          </div>
-                        </div>
+                    {loginError === "pending_approval" ? (
+                      <div className="p-4 bg-urban-signal/10 border border-urban-signal/25 rounded-xl text-center">
+                        <p className="text-xs text-urban-signal leading-relaxed font-bold">
+                          Access Pending Approval
+                        </p>
+                        <p className="text-[11px] text-white/70 leading-relaxed mt-1">
+                          Your Google account access request is submitted. You will receive an email notification once the administrator grants you permission.
+                        </p>
                       </div>
-
-                      {requestSuccessMsg && <p className="text-xs text-urban-park font-medium">{requestSuccessMsg}</p>}
-                      <button 
-                        type="submit"
-                        disabled={!requestEmail || !requestDescription || !requestNick}
-                        className="w-full py-2.5 bg-urban-blueprint/25 hover:bg-urban-blueprint/40 text-white rounded-xl text-sm font-bold tracking-wide transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
-                      >
-                        <Send className="w-4 h-4" /> Send Request
-                      </button>
-                    </form>
-                  )}
+                    ) : (
+                      loginError && (
+                        <div className="p-3 bg-urban-brick/10 border border-urban-brick/20 rounded-xl text-center">
+                          <p className="text-xs text-urban-brick font-medium">{loginError}</p>
+                        </div>
+                      )
+                    )}
+                  </div>
                 </div>
               )}
             </>
@@ -826,7 +740,7 @@ export default function Home() {
             </div>
           )}
 
-          {sidebarTab === "admin" && adminPin && (
+          {sidebarTab === "admin" && isAdmin && (
             <div className="space-y-6 font-mono">
               <h3 className="text-xs font-bold uppercase tracking-wider text-urban-concrete flex items-center gap-1.5 border-b border-white/10 pb-2">
                 <Cpu className="w-3.5 h-3.5 text-urban-signal" />

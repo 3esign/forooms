@@ -83,7 +83,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const isAuthenticated = !!activeAccount;
-  const isAdmin = activeAccount?.id === "admin" || activeAccount?.email === "admin@forooms.app";
+  const isAdmin = activeAccount?.id === "admin" || 
+                  activeAccount?.email?.toLowerCase() === "admin@forooms.app" ||
+                  activeAccount?.email?.toLowerCase() === "poturaksemir@gmail.com" ||
+                  !!adminPin;
 
   return (
     <AuthContext.Provider value={{
