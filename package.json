@@ -10,7 +10,8 @@
     "start:server": "node scripts/server.js",
     "lint": "eslint",
     "deploy:party": "partykit deploy",
-    "deploy:vercel": "vercel --prod"
+    "deploy:vercel": "vercel --prod",
+    "publish": "git add . && git commit -m \"update: code changes\" && git push origin master:main"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",
