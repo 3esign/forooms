@@ -86,6 +86,9 @@ async function initDb() {
       loadLocalDb();
     }
   } else {
+    if (process.env.NODE_ENV === "production" || process.env.RENDER) {
+      throw new Error("DATABASE_URL environment variable is REQUIRED in production/Render to prevent data loss!");
+    }
     console.log("No DATABASE_URL set. Using local file storage.");
     dbStatus = "Local File Storage (db.json)";
     dbError = null;
@@ -132,14 +135,21 @@ function saveDb() {
 const tokens = new Map();
 
 // Helper to hash password
-function hashPassword(password) {
-  return crypto.createHash("sha256").update(password).digest("hex");
+function hashPassword(password, salt) {
+  if (!salt) {
+    salt = crypto.randomBytes(16).toString("hex");
+  }
+  const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
+  return { hash, salt };
 }
 
 function generateRandomPassword() {
   const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let pass = "";
-  for (let i = 0; i < 8; i++) pass += chars.charAt(Math.floor(Math.random() * chars.length));
+  for (let i = 0; i < 8; i++) {
+    const idx = crypto.randomInt(0, chars.length);
+    pass += chars.charAt(idx);
+  }
   return pass;
 }
 
@@ -149,8 +159,34 @@ const authConnections = new Set();
 const adminConnections = new Set();
 
 const PORT = process.env.PORT || 1999;
-const ADMIN_PIN = process.env.ADMIN_PIN || "1234";
+
+let ADMIN_PIN = process.env.ADMIN_PIN;
+if (!ADMIN_PIN) {
+  if (process.env.NODE_ENV === "production" || process.env.RENDER) {
+    throw new Error("ADMIN_PIN environment variable is REQUIRED in production/Render!");
+  }
+  ADMIN_PIN = "123456"; // Secure local development default
+} else if (ADMIN_PIN === "1234") {
+  if (process.env.NODE_ENV === "production" || process.env.RENDER) {
+    throw new Error("ADMIN_PIN cannot be the default insecure value '1234' in production!");
+  }
+}
+
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@forooms.app";
 const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
+
+// Constant-time timing-safe string comparison for security tokens and admin PINs
+function safeCompare(a, b) {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) {
+    // Run comparison on dummy to prevent timing attack side-channel
+    crypto.timingSafeEqual(aBuf, aBuf);
+    return false;
+  }
+  return crypto.timingSafeEqual(aBuf, bBuf);
+}
 
 // HTTP server to handle verification & static health checks
 const server = http.createServer((req, res) => {
@@ -169,7 +205,7 @@ const server = http.createServer((req, res) => {
 
   if (parsedUrl.pathname === "/verify") {
     const token = parsedUrl.query.token;
-    if (token === ADMIN_PIN) {
+    if (safeCompare(token, ADMIN_PIN)) {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ valid: true, email: "admin", role: "admin" }));
       return;
@@ -218,7 +254,7 @@ wss.on("connection", (ws, req) => {
   let avatarNodes = 4;
 
   if (token) {
-    if (token === ADMIN_PIN) {
+    if (safeCompare(token, ADMIN_PIN)) {
       role = "admin";
       email = "admin@forooms.app";
       nick = "Admin";
@@ -275,9 +311,16 @@ wss.on("connection", (ws, req) => {
             return;
           }
 
-          const targetHash = hashPassword(clientPassword);
-          const account = Object.values(db.accounts).find(a => a.email === loginEmail && a.passwordHash === targetHash);
+          const account = Object.values(db.accounts).find(a => a.email === loginEmail);
+          let loginSuccess = false;
           if (account) {
+            const { hash } = hashPassword(clientPassword, account.passwordSalt);
+            if (account.passwordHash === hash) {
+              loginSuccess = true;
+            }
+          }
+
+          if (loginSuccess && account) {
             const sessionToken = crypto.randomUUID();
             tokens.set(sessionToken, {
               email: account.email,
@@ -287,7 +330,7 @@ wss.on("connection", (ws, req) => {
               avatarNodes: account.avatarNodes || 4
             });
 
-            const safeAccount = { ...account, passwordHash: undefined };
+            const safeAccount = { ...account, passwordHash: undefined, passwordSalt: undefined };
             ws.send(JSON.stringify({ type: "login_success", payload: { account: safeAccount, token: sessionToken } }));
           } else {
             ws.send(JSON.stringify({ type: "login_failed", payload: "Invalid email or password" }));
@@ -321,7 +364,7 @@ wss.on("connection", (ws, req) => {
                 },
                 body: JSON.stringify({
                   from: "FOROOMS Access <onboarding@resend.dev>",
-                  to: "poturaksemir@gmail.com",
+                  to: ADMIN_EMAIL,
                   subject: `New Access Request from ${newReq.email}`,
                   html: `<p><strong>Email:</strong> ${newReq.email}</p><p><strong>Description:</strong> ${newReq.description}</p><p><a href="https://forooms.vercel.app/admin">Approve/Reject in Admin Dashboard</a></p>`
                 })
@@ -378,7 +421,7 @@ wss.on("connection", (ws, req) => {
           msg.type === "delete_request" ||
           msg.type === "toggle_create_access"
         ) {
-          if (msg.payload.adminPin !== ADMIN_PIN) {
+          if (!safeCompare(msg.payload.adminPin, ADMIN_PIN)) {
             ws.send(JSON.stringify({ type: "error", payload: "Unauthorized" }));
             return;
           }
@@ -388,10 +431,12 @@ wss.on("connection", (ws, req) => {
           if (msg.type === "add_account") {
             const accId = crypto.randomUUID();
             const rawPass = generateRandomPassword();
+            const { hash, salt } = hashPassword(rawPass);
             db.accounts[accId] = {
               id: accId,
               email: msg.payload.email,
-              passwordHash: hashPassword(rawPass),
+              passwordHash: hash,
+              passwordSalt: salt,
               canCreateForoom: msg.payload.canCreateForoom,
               createdAt: Date.now(),
               nick: msg.payload.nick || msg.payload.email.split("@")[0],
@@ -417,10 +462,12 @@ wss.on("connection", (ws, req) => {
               reqData.status = "approved";
               const accId = crypto.randomUUID();
               const rawPass = generateRandomPassword();
+              const { hash, salt } = hashPassword(rawPass);
               db.accounts[accId] = {
                 id: accId,
                 email: reqData.email,
-                passwordHash: hashPassword(rawPass),
+                passwordHash: hash,
+                passwordSalt: salt,
                 canCreateForoom: false,
                 createdAt: Date.now(),
                 nick: reqData.nick || reqData.email.split("@")[0],
@@ -557,7 +604,7 @@ wss.on("connection", (ws, req) => {
         const msg = JSON.parse(data.toString());
 
         if (msg.type === "edit") {
-          if (role !== "builder" && role !== "admin") return;
+          if (ws.state.role !== "builder" && ws.state.role !== "admin") return;
           const key = `${msg.x},${msg.y},${msg.z}`;
 
           if (!db.roomEdits[roomName]) db.roomEdits[roomName] = {};
@@ -567,7 +614,7 @@ wss.on("connection", (ws, req) => {
             delete db.roomEdits[roomName][key];
             if (db.roomInfoBlocks[roomName][key]) {
               delete db.roomInfoBlocks[roomName][key];
-              addLog("edit", `${email} deleted a block with info`);
+              addLog("edit", `${ws.state.email} deleted a block with info`);
             }
           } else {
             db.roomEdits[roomName][key] = { x: msg.x, y: msg.y, z: msg.z, blockId: msg.blockId };
@@ -580,14 +627,14 @@ wss.on("connection", (ws, req) => {
           }
         }
         else if (msg.type === "place_info") {
-          if (role === "guest") return;
+          if (ws.state.role === "guest") return;
           const key = `${msg.x},${msg.y},${msg.z}`;
 
           if (!db.roomInfoBlocks[roomName]) db.roomInfoBlocks[roomName] = {};
           db.roomInfoBlocks[roomName][key] = msg.info;
           saveDb();
 
-          addLog("info", `${email} placed information at ${msg.x}, ${msg.y}, ${msg.z}`);
+          addLog("info", `${ws.state.email} placed information at ${msg.x}, ${msg.y}, ${msg.z}`);
           
           // Broadcast to everyone in the room
           const updatePayload = JSON.stringify({
@@ -618,14 +665,14 @@ wss.on("connection", (ws, req) => {
           }
         }
         else if (msg.type === "chat") {
-          addLog("chat", `${nick}: ${msg.message}`);
+          addLog("chat", `${ws.state.nick}: ${msg.message}`);
         }
         else if (msg.type === "admin_change_role") {
-          if (role === "admin") {
+          if (ws.state.role === "admin") {
             const target = Array.from(roomClients).find(c => c.state.id === msg.targetId);
             if (target) {
               target.state.role = msg.newRole;
-              addLog("role_change", `${email} changed ${target.state.email}'s role to ${msg.newRole}`);
+              addLog("role_change", `${ws.state.email} changed ${target.state.email}'s role to ${msg.newRole}`);
               broadcastPresence();
               
               target.send(JSON.stringify({
@@ -636,12 +683,12 @@ wss.on("connection", (ws, req) => {
           }
         }
         else if (msg.type === "admin_clear_room") {
-          if (role === "admin") {
+          if (ws.state.role === "admin") {
             db.roomEdits[roomName] = {};
             db.roomInfoBlocks[roomName] = {};
             saveDb();
 
-            addLog("clear", `${email} cleared the foroom layout and notes`);
+            addLog("clear", `${ws.state.email} cleared the foroom layout and notes`);
             
             const clearPayload = JSON.stringify({ type: "room_cleared" });
             for (const client of roomClients) {
@@ -650,7 +697,7 @@ wss.on("connection", (ws, req) => {
           }
         }
         else if (msg.type === "appearance_update") {
-          if (role === "admin") {
+          if (ws.state.role === "admin") {
             db.roomAppearances[roomName] = msg.appearance;
             saveDb();
 
@@ -670,7 +717,7 @@ wss.on("connection", (ws, req) => {
       if (roomClients.size === 0) {
         rooms.delete(roomName);
       }
-      addLog("leave", `${nick} left the foroom`);
+      addLog("leave", `${ws.state.nick} left the foroom`);
       broadcastPresence();
       console.log(`[room:${roomName}] Disconnected: ${ws.state.id}`);
     });
