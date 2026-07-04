@@ -54,7 +54,7 @@ export function ActivitySidebar({
             {onlinePlayers.map(p => (
               <div key={p.id} className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-urban-park shadow-[0_0_5px_rgba(45,212,191,0.8)]" />
-                <span className="text-white text-sm truncate">{p.nick || p.email || p.id.substring(0, 12)}</span>
+                <span className="text-white text-sm truncate">{p.nick || p.id.substring(0, 8)}</span>
                 {p.role === "admin" && (
                   <span className="ml-auto text-[10px] text-urban-signal border border-urban-signal/30 bg-urban-signal/10 px-1 rounded uppercase font-bold">Admin</span>
                 )}

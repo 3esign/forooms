@@ -5,7 +5,8 @@ import { Settings, X } from "lucide-react";
 
 interface PlayerData {
   id: string;
-  email: string;
+  email?: string;
+  nick?: string;
   role: string;
 }
 
@@ -45,10 +46,10 @@ export function AdminModal({
             <div key={p.id} className="flex items-center justify-between bg-[#1C1C1C] p-3 rounded-xl border border-[#333]">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-urban-blueprint/20 flex items-center justify-center text-urban-blueprint font-bold">
-                  {p.email.charAt(0).toUpperCase()}
+                  {(p.nick || "Anonymous").charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <div className="text-white text-sm font-bold">{p.email}</div>
+                  <div className="text-white text-sm font-bold">{p.nick || "Anonymous"}</div>
                   <div className="text-xs text-[#888]">ID: {p.id.substring(0, 8)}...</div>
                 </div>
               </div>

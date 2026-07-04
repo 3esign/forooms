@@ -972,8 +972,7 @@ wss.on("connection", (ws, req) => {
       return Array.from(roomClients).map(c => ({
         id: c.state.id,
         role: c.state.role,
-        email: c.state.email,
-        nick: c.state.nick,
+        nick: c.state.nick || (c.state.email ? c.state.email.split("@")[0] : "Guest"),
         avatarColor: c.state.avatarColor,
         avatarNodes: c.state.avatarNodes,
         x: c.state.x,
@@ -1028,7 +1027,7 @@ wss.on("connection", (ws, req) => {
             delete db.roomEdits[roomName][key];
             if (db.roomInfoBlocks[roomName][key]) {
               delete db.roomInfoBlocks[roomName][key];
-              addLog("edit", `${ws.state.email} deleted a block with info`);
+              addLog("edit", `${ws.state.nick || "Builder"} deleted a block with info`);
             }
           } else {
             db.roomEdits[roomName][key] = { x: msg.x, y: msg.y, z: msg.z, blockId: msg.blockId };
@@ -1048,7 +1047,7 @@ wss.on("connection", (ws, req) => {
           db.roomInfoBlocks[roomName][key] = msg.info;
           saveDb();
 
-          addLog("info", `${ws.state.email} placed information at ${msg.x}, ${msg.y}, ${msg.z}`);
+          addLog("info", `${ws.state.nick || "Builder"} placed information at ${msg.x}, ${msg.y}, ${msg.z}`);
           
           // Broadcast to everyone in the room
           const updatePayload = JSON.stringify({
@@ -1083,7 +1082,6 @@ wss.on("connection", (ws, req) => {
             id: crypto.randomUUID(),
             senderId: ws.state.id,
             nick: ws.state.nick,
-            email: ws.state.email,
             message: msg.message,
             timestamp: Date.now()
           };
@@ -1109,7 +1107,7 @@ wss.on("connection", (ws, req) => {
             const target = Array.from(roomClients).find(c => c.state.id === msg.targetId);
             if (target) {
               target.state.role = msg.newRole;
-              addLog("role_change", `${ws.state.email} changed ${target.state.email}'s role to ${msg.newRole}`);
+              addLog("role_change", `${ws.state.nick || "Admin"} changed ${target.state.nick || "User"}'s role to ${msg.newRole}`);
               
               const foroom = Object.values(db.forooms).find(f => f.name.toLowerCase() === roomName.toLowerCase());
               if (foroom) {
@@ -1133,7 +1131,7 @@ wss.on("connection", (ws, req) => {
             db.roomInfoBlocks[roomName] = {};
             saveDb();
 
-            addLog("clear", `${ws.state.email} cleared the foroom layout and notes`);
+            addLog("clear", `${ws.state.nick || "Admin"} cleared the foroom layout and notes`);
             
             const clearPayload = JSON.stringify({ type: "room_cleared" });
             for (const client of roomClients) {

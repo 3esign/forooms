@@ -199,7 +199,7 @@ export function OtherPlayer({ player, activeChat }: { player: PlayerState; activ
             </div>
           )}
           <div className="bg-black/80 border border-white/20 px-2 py-0.5 rounded text-[10px] font-bold text-white/90 whitespace-nowrap shadow-md uppercase tracking-wider">
-            {player.nick || player.email || "Builder"}
+            {player.nick || "Builder"}
           </div>
         </div>
       </Html>

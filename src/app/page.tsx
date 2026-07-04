@@ -669,7 +669,7 @@ Output ONLY valid JSON.`;
                           <MapPin className="w-3.5 h-3.5 text-urban-park" />
                           {f.name}
                         </div>
-                        <div className="text-xxs text-urban-concrete mt-0.5">By: {f.creatorEmail}</div>
+                        <div className="text-xxs text-urban-concrete mt-0.5">By: {f.creatorEmail ? f.creatorEmail.split("@")[0] : "Creator"}</div>
                       </div>
                       <div className="flex gap-1">
                         <button 
