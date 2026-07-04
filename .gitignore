@@ -45,3 +45,8 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# database / data
+/data/
+db.json
+*.log
