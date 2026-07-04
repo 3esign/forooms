@@ -881,6 +881,7 @@ export function VoxelScene({ bbox, onExit, role, token, roomName }: VoxelScenePr
             logs={logs}
             roomName={roomName}
             bbox={bbox}
+            activeLayer={activeLayer}
           />
         </div>
       )}

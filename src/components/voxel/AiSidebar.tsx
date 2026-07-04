@@ -15,6 +15,7 @@ interface AiSidebarProps {
   logs: Array<{ timestamp: number; type?: string; message: string }>;
   roomName: string;
   bbox: [number, number, number, number];
+  activeLayer: string;
 }
 
 export function AiSidebar({
@@ -23,7 +24,8 @@ export function AiSidebar({
   onRunSimulation,
   logs,
   roomName,
-  bbox
+  bbox,
+  activeLayer
 }: AiSidebarProps) {
   // Personal AI State
   const [personalAiEnabled, setPersonalAiEnabled] = useState(false);
@@ -263,22 +265,22 @@ Be concise and help the user build their voxel city block. Speak within the cont
         </div>
 
         {/* Future Simulator Panel (Admin Only) */}
-        {currentRole === "admin" && (
+        {currentRole === "admin" && activeLayer === "simulation" && (
           <div className="bg-black/60 border border-urban-concrete/30 rounded-xl overflow-hidden backdrop-blur-md shadow-2xl flex flex-col shrink-0">
-            <div className="p-3 border-b border-urban-concrete/20 bg-white/5 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-urban-signal animate-pulse" />
-              <h3 className="text-white text-xs font-bold uppercase tracking-wider">Future Simulator</h3>
+            <div className="p-2.5 border-b border-urban-concrete/20 bg-white/5 flex items-center gap-2">
+              <Sparkles className="w-3.5 h-3.5 text-urban-signal animate-pulse" />
+              <h3 className="text-white text-[10px] font-bold uppercase tracking-widest">Future Simulator</h3>
             </div>
 
-            <div className="p-3 space-y-3.5">
+            <div className="p-2.5 space-y-3">
               {/* Provider Config */}
-              <div className="space-y-1.5 bg-black/40 p-2.5 rounded-lg border border-white/5">
-                <div className="flex items-center justify-between text-xxs font-bold text-urban-concrete uppercase">
+              <div className="space-y-1 bg-black/40 p-2 rounded-lg border border-white/5">
+                <div className="flex items-center justify-between text-[9px] font-bold text-urban-concrete uppercase tracking-wider">
                   <span>API Key Config</span>
                   <select 
                     value={simProvider}
                     onChange={(e) => setSimProvider(e.target.value)}
-                    className="bg-[#111] border border-white/10 text-[10px] text-white rounded px-1 py-0.5 outline-none cursor-pointer"
+                    className="bg-[#111] border border-white/10 text-[9px] text-white rounded px-1 py-0.5 outline-none cursor-pointer"
                   >
                     <option value="openrouter">OpenRouter</option>
                     <option value="openai">OpenAI</option>
@@ -286,31 +288,31 @@ Be concise and help the user build their voxel city block. Speak within the cont
                 </div>
                 
                 <div className="relative flex items-center">
-                  <Key className="w-3.5 h-3.5 text-white/30 absolute left-2" />
+                  <Key className="w-3 h-3 text-white/30 absolute left-2" />
                   <input
                     type={showSimKey ? "text" : "password"}
                     placeholder="sk-or-..."
                     value={simKey}
                     onChange={(e) => handleSaveSimKey(e.target.value)}
-                    className="w-full bg-[#111] border border-white/10 rounded pl-7 pr-8 py-1 text-xxs text-white focus:outline-none focus:border-urban-blueprint font-mono"
+                    className="w-full bg-[#111] border border-white/10 rounded pl-6 pr-8 py-0.5 text-[10px] text-white focus:outline-none focus:border-urban-blueprint font-mono"
                   />
                   <button 
                     onClick={() => setShowSimKey(!showSimKey)}
                     className="absolute right-2 text-white/40 hover:text-white transition-colors"
                   >
-                    {showSimKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    {showSimKey ? <EyeOff className="w-3 h-3" /> : <Key className="w-3 h-3" />}
                   </button>
                 </div>
               </div>
 
               {/* Slider for Inference Depth */}
-              <div className="space-y-2">
-                <div className="flex justify-between items-center text-xxs font-bold text-urban-concrete uppercase">
-                  <span>Inference depth / Token Budget</span>
-                  <span className="text-urban-signal font-mono font-bold capitalize">{simDepth}</span>
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center text-[9px] font-bold text-urban-concrete uppercase tracking-wider">
+                  <span>Inference depth / Budget</span>
+                  <span className="text-urban-signal font-bold uppercase text-[9px]">{simDepth}</span>
                 </div>
                 
-                <div className="flex gap-2">
+                <div className="flex gap-1.5">
                   {[
                     { id: "light", label: "Light" },
                     { id: "standard", label: "Standard" },
@@ -319,7 +321,7 @@ Be concise and help the user build their voxel city block. Speak within the cont
                     <button
                       key={d.id}
                       onClick={() => setSimDepth(d.id)}
-                      className={`flex-1 py-1 rounded text-xxs font-bold uppercase tracking-wider transition-all cursor-pointer border
+                      className={`flex-1 py-1 rounded text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer border
                         ${simDepth === d.id 
                           ? 'bg-urban-signal/20 border-urban-signal text-urban-signal' 
                           : 'bg-white/5 border-white/5 text-urban-concrete hover:bg-white/10'
@@ -335,16 +337,16 @@ Be concise and help the user build their voxel city block. Speak within the cont
               <button
                 onClick={triggerSimulation}
                 disabled={isSimulationRunning || !simKey}
-                className="w-full py-2.5 bg-urban-signal hover:bg-red-500 disabled:opacity-40 disabled:hover:bg-urban-signal text-white rounded-lg text-xs font-bold tracking-wide transition-all cursor-pointer shadow-[0_0_15px_rgba(239,68,68,0.25)] flex items-center justify-center gap-2"
+                className="w-full py-2 bg-urban-signal hover:bg-red-500 disabled:opacity-40 disabled:hover:bg-urban-signal text-white rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer shadow-[0_0_12px_rgba(239,68,68,0.2)] flex items-center justify-center gap-1.5"
               >
                 {isSimulationRunning ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     Simulating Space...
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-4 h-4" />
+                    <Sparkles className="w-3.5 h-3.5" />
                     Run Future Simulation
                   </>
                 )}
@@ -352,10 +354,10 @@ Be concise and help the user build their voxel city block. Speak within the cont
 
               {isSimulationRunning && (
                 <div className="space-y-1">
-                  <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+                  <div className="w-full bg-white/10 h-1 rounded-full overflow-hidden">
                     <div className="bg-urban-signal h-full w-[65%] animate-pulse rounded-full"></div>
                   </div>
-                  <p className="text-[10px] text-urban-concrete text-center italic">Projecting 50, 100, and 200 year models...</p>
+                  <p className="text-[9px] text-urban-concrete text-center italic">Projecting 50, 100, and 200 year models...</p>
                 </div>
               )}
             </div>

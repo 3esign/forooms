@@ -676,14 +676,31 @@ wss.on("connection", (ws, req) => {
           }
 
           const foroomId = crypto.randomUUID();
+          const foroomName = msg.payload.name;
           const newForoom = {
             id: foroomId,
-            name: msg.payload.name,
+            name: foroomName,
             bbox: msg.payload.bbox,
             creatorEmail: msg.payload.creatorEmail,
             createdAt: Date.now()
           };
           db.forooms[foroomId] = newForoom;
+
+          // Save AI overrides if provided
+          if (msg.payload.initialEdits) {
+            db.roomEdits[foroomName] = {};
+            msg.payload.initialEdits.forEach(e => {
+              const key = `${e.x},${e.y},${e.z}`;
+              db.roomEdits[foroomName][key] = e;
+            });
+          }
+          if (msg.payload.initialInfoBlocks) {
+            db.roomInfoBlocks[foroomName] = msg.payload.initialInfoBlocks;
+          }
+          if (msg.payload.initialAppearance) {
+            db.roomAppearances[foroomName] = msg.payload.initialAppearance;
+          }
+
           saveDb();
 
           // Broadcast updated list to all active auth connections

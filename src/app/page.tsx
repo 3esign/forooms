@@ -48,6 +48,15 @@ export default function Home() {
   // Forooms data
   const [forooms, setForooms] = useState<ActiveForoom[]>([]);
   const [newForoomName, setNewForoomName] = useState("");
+  
+  // AI Digital Twin States
+  const [aiTwinEnabled, setAiTwinEnabled] = useState(false);
+  const [aiTwinProvider, setAiTwinProvider] = useState("openrouter");
+  const [aiTwinKey, setAiTwinKey] = useState("");
+  const [showTwinKey, setShowTwinKey] = useState(false);
+  const [aiTwinStyle, setAiTwinStyle] = useState("realistic");
+  const [isAiTwinGenerating, setIsAiTwinGenerating] = useState(false);
+
   const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
 
   // Guest mode flag passed to canvas
@@ -81,7 +90,33 @@ export default function Home() {
     if (typeof window === "undefined") return;
     // After an explicit log off, require an explicit click before re-enabling Google sign-in UI.
     setGoogleUiEnabled(localStorage.getItem("google_logged_out") !== "true");
+    
+    // Load Twin AI configurations
+    setAiTwinKey(localStorage.getItem("twin_ai_key") || "");
+    setAiTwinEnabled(localStorage.getItem("twin_ai_enabled") === "true");
+    setAiTwinProvider(localStorage.getItem("twin_ai_provider") || "openrouter");
+    setAiTwinStyle(localStorage.getItem("twin_ai_style") || "realistic");
   }, []);
+
+  const handleSaveTwinKey = (val: string) => {
+    setAiTwinKey(val);
+    localStorage.setItem("twin_ai_key", val);
+  };
+
+  const handleSaveTwinEnabled = (val: boolean) => {
+    setAiTwinEnabled(val);
+    localStorage.setItem("twin_ai_enabled", val ? "true" : "false");
+  };
+
+  const handleSaveTwinProvider = (val: string) => {
+    setAiTwinProvider(val);
+    localStorage.setItem("twin_ai_provider", val);
+  };
+
+  const handleSaveTwinStyle = (val: string) => {
+    setAiTwinStyle(val);
+    localStorage.setItem("twin_ai_style", val);
+  };
 
   useEffect(() => {
     if (activeAccount) {
@@ -318,10 +353,9 @@ export default function Home() {
     }
   };
 
-  const handleCreateForoom = () => {
+  const handleCreateForoom = async () => {
     if (!selectedBbox) return;
     
-    // If it's a new Foroom, let's register it in auth.ts
     const existing = forooms.find(f => 
       Math.abs(f.bbox[0] - selectedBbox[0]) < 0.0001 &&
       Math.abs(f.bbox[1] - selectedBbox[1]) < 0.0001
@@ -339,13 +373,96 @@ export default function Home() {
         return;
       }
 
+      let initialEdits = [];
+      let initialInfoBlocks = {};
+      let initialAppearance = null;
+
+      if (aiTwinEnabled && aiTwinKey) {
+        setIsAiTwinGenerating(true);
+        try {
+          const prompt = `You are a spatial digital twin generator. Your task is to output custom voxel decorations and initial landuse/landmark markers for a 3D city block named "${newForoomName.trim()}" at coordinates [${selectedBbox.join(", ")}].
+Style Selected: "${aiTwinStyle}"
+
+You MUST return a JSON object with three fields:
+1. "appearance": {
+     "skyColor": "#87CEEB",
+     "fogColor": "#cccccc",
+     "fogDensity": 0.005,
+     "sunElevation": 45,
+     "ambientColor": "#404040"
+   }
+2. "infoBlocks": {
+     "x,y,z": "Title | Description about the landmark in this block"
+   }
+3. "edits": Array<{ x: number, y: number, z: number, blockId: number }>
+   Suggest between 15 and 40 blocks.
+   Block IDs: 
+   2: Glass, 3: Park/Grass, 4: Metal/Steel, 6: Solar Panel, 7: Neon/Light, 8: Foliage/Tree.
+   Focus on styling:
+   - For "historic": use traditional architecture, clay/tile roof colors, and stone/brick block styles, add historic landmarks/old town marketplace description markers.
+   - For "ecocity": place green foliage (8) and solar panels (6) on rooftops, add descriptions of vertical gardens.
+   - For "cyberpunk": place high-density neon/light blocks (7) and steel (4), add descriptions of corporate holographic billboards or data junctions.
+   - For "realistic": place glass (2) windows on towers and trees (8) along streets, add description markers for real-world cafes/buses.
+
+Generate coordinates around the center of the block (between x=40 and x=80, z=40 and z=80, with ground level around y=4). Buildings stand between y=4 and y=15.
+
+Output ONLY valid JSON.`;
+
+          const url = aiTwinProvider === "openrouter" 
+            ? "https://openrouter.ai/api/v1/chat/completions" 
+            : "https://api.openai.com/v1/chat/completions";
+
+          const headers: Record<string, string> = {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${aiTwinKey}`
+          };
+
+          if (aiTwinProvider === "openrouter") {
+            headers["HTTP-Referer"] = "https://forooms.vercel.app";
+            headers["X-Title"] = "FOROOMS Digital Twin Generator";
+          }
+
+          const response = await fetch(url, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              model: aiTwinProvider === "openrouter" ? "google/gemini-2.5-flash" : "gpt-4o-mini",
+              messages: [
+                { role: "system", content: "You are a spatial digital twin JSON generator. You output only valid JSON." },
+                { role: "user", content: prompt }
+              ]
+            })
+          });
+
+          if (!response.ok) throw new Error(`API error: ${response.statusText}`);
+          const resData = await response.json();
+          const reply = resData.choices?.[0]?.message?.content || "";
+          
+          const jsonMatch = reply.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            initialEdits = parsed.edits || [];
+            initialInfoBlocks = parsed.infoBlocks || {};
+            initialAppearance = parsed.appearance || null;
+          }
+        } catch (err: any) {
+          console.error("AI Digital Twin generation failed, falling back to default.", err);
+          alert(`AI Generation failed: ${err.message || err.toString()}. Creating default Foroom instead.`);
+        } finally {
+          setIsAiTwinGenerating(false);
+        }
+      }
+
       socket.send(JSON.stringify({
         type: "create_foroom",
         payload: {
           name: newForoomName.trim(),
           bbox: selectedBbox,
           creatorEmail: activeAccount?.email || "unknown@builder",
-          token: authSessionToken || adminPin || undefined
+          token: authSessionToken || adminPin || undefined,
+          initialEdits,
+          initialInfoBlocks,
+          initialAppearance
         }
       } as AuthMessage));
     }
@@ -670,6 +787,80 @@ export default function Home() {
                             </div>
                           )}
 
+                          {!isExistingForoom && activeAccount?.canCreateForoom && (
+                            <div className="p-3 bg-black/40 border border-urban-concrete/20 rounded-xl mb-4 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                                  <Cpu className="w-3.5 h-3.5 text-urban-park animate-pulse" />
+                                  AI Digital Twin Assistant
+                                </span>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={aiTwinEnabled} 
+                                    onChange={(e) => handleSaveTwinEnabled(e.target.checked)}
+                                    className="sr-only peer"
+                                  />
+                                  <div className="w-7 h-4 bg-white/10 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-urban-park"></div>
+                                </label>
+                              </div>
+
+                              {aiTwinEnabled && (
+                                <div className="space-y-2.5 pt-1">
+                                  {/* Provider & Style */}
+                                  <div className="flex gap-2">
+                                    <div className="flex-1 space-y-1">
+                                      <label className="text-[10px] text-urban-concrete uppercase font-bold">Provider</label>
+                                      <select 
+                                        value={aiTwinProvider}
+                                        onChange={(e) => handleSaveTwinProvider(e.target.value)}
+                                        className="w-full bg-[#111] border border-white/10 text-xs text-white rounded px-2 py-1 outline-none cursor-pointer"
+                                      >
+                                        <option value="openrouter">OpenRouter</option>
+                                        <option value="openai">OpenAI</option>
+                                      </select>
+                                    </div>
+                                    <div className="flex-1 space-y-1">
+                                      <label className="text-[10px] text-urban-concrete uppercase font-bold">Twin Style</label>
+                                      <select 
+                                        value={aiTwinStyle}
+                                        onChange={(e) => handleSaveTwinStyle(e.target.value)}
+                                        className="w-full bg-[#111] border border-white/10 text-xs text-white rounded px-2 py-1 outline-none cursor-pointer"
+                                      >
+                                        <option value="realistic">Realistic Local</option>
+                                        <option value="historic">Historic</option>
+                                        <option value="ecocity">Eco-City</option>
+                                        <option value="cyberpunk">Cyberpunk</option>
+                                      </select>
+                                    </div>
+                                  </div>
+
+                                  {/* API Key */}
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] text-urban-concrete uppercase font-bold">API Key</label>
+                                    <div className="relative flex items-center">
+                                      <Key className="w-3.5 h-3.5 text-white/30 absolute left-2" />
+                                      <input
+                                        type={showTwinKey ? "text" : "password"}
+                                        placeholder="sk-or-..."
+                                        value={aiTwinKey}
+                                        onChange={(e) => handleSaveTwinKey(e.target.value)}
+                                        className="w-full bg-[#111] border border-white/10 rounded pl-7 pr-8 py-1 text-xxs text-white focus:outline-none focus:border-urban-blueprint font-mono"
+                                      />
+                                      <button 
+                                        type="button"
+                                        onClick={() => setShowTwinKey(!showTwinKey)}
+                                        className="absolute right-2 text-white/40 hover:text-white transition-colors"
+                                      >
+                                        {showTwinKey ? <Eye className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
                           {isExistingForoom ? (
                             <button 
                               onClick={() => {
@@ -689,10 +880,20 @@ export default function Home() {
                             activeAccount?.canCreateForoom && (
                               <button 
                                 onClick={handleCreateForoom}
-                                className="w-full py-3 bg-urban-blueprint hover:bg-blue-500 text-white rounded-xl font-bold tracking-wide transition-all flex items-center justify-center gap-2 cursor-pointer text-sm shadow-[0_0_20px_rgba(47,129,247,0.3)]"
+                                disabled={isAiTwinGenerating}
+                                className="w-full py-3 bg-urban-blueprint hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl font-bold tracking-wide transition-all flex items-center justify-center gap-2 cursor-pointer text-sm shadow-[0_0_20px_rgba(47,129,247,0.3)]"
                               >
-                                Initialize Voxel Server
-                                <ChevronRight className="w-4 h-4" />
+                                {isAiTwinGenerating ? (
+                                  <>
+                                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    Generating Twin...
+                                  </>
+                                ) : (
+                                  <>
+                                    Initialize Voxel Server
+                                    <ChevronRight className="w-4 h-4" />
+                                  </>
+                                )}
                               </button>
                             )
                           )}
