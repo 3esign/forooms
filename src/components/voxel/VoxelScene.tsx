@@ -678,7 +678,7 @@ export function VoxelScene({ bbox, onExit, role, token, roomName }: VoxelScenePr
       )}
 
       {!overlayVisible && (
-        <div className="absolute top-4 right-4 z-10 bg-black/50 text-white px-4 py-2 rounded backdrop-blur-sm border border-white/10 text-sm font-mono flex items-center gap-2">
+        <div className="absolute top-4 left-32 z-10 bg-black/50 text-white px-4 py-2 rounded backdrop-blur-sm border border-white/10 text-sm font-mono flex items-center gap-2">
             <span>{isLocked ? "🔒 WASD + Mouse" : "🔓 Click to look around"}</span>
             <span className="text-white/40">|</span>
             <span className={`uppercase text-xs px-2 py-0.5 rounded ${movementMode === "fps" ? "bg-urban-blueprint/30 text-urban-blueprint" : "bg-urban-signal/30 text-urban-signal"}`}>
