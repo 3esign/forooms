@@ -560,13 +560,20 @@ Output ONLY valid JSON.`;
         
         {/* Header */}
         <div className="p-8 border-b border-urban-concrete/20 bg-gradient-to-br from-urban-void to-black">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-urban-blueprint/20 text-urban-blueprint flex items-center justify-center shadow-[0_0_15px_rgba(47,129,247,0.3)]">
-              <Layers className="w-6 h-6" />
+          <div className="flex items-center gap-4 mb-3">
+            <div className="w-12 h-12 rounded-xl bg-urban-blueprint/20 text-urban-blueprint flex items-center justify-center shadow-[0_0_20px_rgba(47,129,247,0.4)] border border-urban-blueprint/30">
+              <Layers className="w-7 h-7" />
             </div>
-            <h1 className="text-2xl font-black text-white tracking-widest uppercase">FOROOMS</h1>
+            <h1 className="text-4xl font-black text-white tracking-widest uppercase leading-none">FOROOMS</h1>
           </div>
-          <p className="text-xs font-mono text-urban-concrete">Institute for Applied Design Intelligence</p>
+          <a 
+            href="https://github.com/3esign/forooms" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="text-[10px] font-mono text-urban-concrete hover:text-urban-blueprint transition-colors block mt-1"
+          >
+            Institute for Applied Design Intelligence
+          </a>
         </div>
 
         {/* Tab Navigation (Only shown when logged in) */}

@@ -203,4 +203,11 @@ Since hosting environments like Render often lack outbound IPv6 routing, the ser
 
 MIT License — free for academic, community, municipal, and commercial use.
 
+---
+
+## ✉️ Contact
+
+* **Project Director**: PhD Poturak Semir
+* **Email**: poturaksemir@gmail.com
+
 <!-- Cache Invalidation Hash Touch: 2026-07-03T15:05:00Z -->
